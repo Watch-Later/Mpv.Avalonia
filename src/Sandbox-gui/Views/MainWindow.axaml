@@ -5,8 +5,8 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:mv="using:AvaloniaMpv"
-    xmlns:vm="using:Sandbox_gui.ViewModels"
     xmlns:views="using:Sandbox_gui.Views"
+    xmlns:vm="using:Sandbox_gui.ViewModels"
     Title="Sandbox_gui"
     d:DesignHeight="450"
     d:DesignWidth="800"
@@ -21,5 +21,26 @@
         -->
         <vm:MainWindowViewModel />
     </Design.DataContext>
-    <views:MyControl/>
+    <ScrollViewer>
+        <StackPanel>
+            <TextBlock HorizontalAlignment="Center" FontSize="30">MPV INSIDE AVALONIA WINDOW!</TextBlock>
+            <Grid RowDefinitions="*,*">
+                <Grid>
+                    <!--  Black Panel placed behind the media control  -->
+                    <Panel
+                        Width="650"
+                        Height="300"
+                        Background="Black" />
+                    <mv:MediaControl
+                        x:Name="mediaCtrl"
+                        Width="650"
+                        Height="300" />
+                </Grid>
+                <StackPanel Grid.Row="1" Orientation="Horizontal">
+                    <Button Click="LoadVideo">Load</Button>
+                    <Button Click="TogglePlayPause">Toggle Play Pause</Button>
+                </StackPanel>
+            </Grid>
+        </StackPanel>
+    </ScrollViewer>
 </Window>

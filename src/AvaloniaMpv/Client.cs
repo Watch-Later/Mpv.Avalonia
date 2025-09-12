@@ -1,6 +1,6 @@
 ﻿using System.Runtime.InteropServices;
 namespace AvaloniaMpv;
-public static class LibMpv
+internal static class LibMpv
 {
     private const string LibName = "mpv"; // TODO: handle platform differences
 

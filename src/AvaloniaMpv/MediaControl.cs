@@ -1,13 +1,12 @@
 namespace AvaloniaMpv;
 using System.Runtime.InteropServices;
+using Avalonia;
 using Avalonia.OpenGL;
 using Avalonia.OpenGL.Controls;
 using Avalonia.Threading;
-using static Avalonia.OpenGL.GlConsts;
-
 public class MediaControl : OpenGlControlBase
 {
-    private nint _mpvContext = nint.Zero;
+    public nint MpvContext { get; private set; } = nint.Zero;
     private nint _mpvRenderContext = nint.Zero;
     private GlInterface? _glInterface = null;
     private bool _redraw = false;
@@ -16,8 +15,6 @@ public class MediaControl : OpenGlControlBase
     private MpvRenderUpdateFn? _renderUpdateCallback;
     protected override void OnOpenGlRender(GlInterface gl, int fb)
     {
-        // gl.Clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        // gl.ClearColor(0.4f, 0.2f, 0.3f, 1.0f);
         if (_redraw)
         {
             var size = this.Bounds;
@@ -45,6 +42,8 @@ public class MediaControl : OpenGlControlBase
             };
             var handle = GCHandle.Alloc(param, GCHandleType.Pinned);
             var paramsP = handle.AddrOfPinnedObject();
+
+            //Release memory
             LibMpv.mpv_render_context_render(_mpvRenderContext, paramsP);
             flip_y.Free();
             handle.Free();
@@ -53,6 +52,7 @@ public class MediaControl : OpenGlControlBase
         }
         RequestNextFrameRendering();
     }
+
 
     protected override void OnOpenGlInit(GlInterface gl)
     {
@@ -63,7 +63,7 @@ public class MediaControl : OpenGlControlBase
     private void InitMpv(GlInterface gl)
     {
         var mpv = LibMpv.mpv_create();
-        _mpvContext = mpv;
+        MpvContext = mpv;
         if (mpv == nint.Zero)
         {
             throw new Exception("Failed to create mpv context");
@@ -116,40 +116,20 @@ public class MediaControl : OpenGlControlBase
         _renderUpdateCallback = MpvRenderUpdate;
         LibMpv.mpv_set_wakeup_callback(mpv, _wakeupCallback, nint.Zero);
         LibMpv.mpv_render_context_set_update_callback(mpv_gl, _renderUpdateCallback, nint.Zero);
-        string[] command = { "loadfile", "/home/noble/Videos/wff-recordings/20250908_070156output.mkv" };
-        nint[] argPtrs = new nint[command.Length + 1];
-        for (int i = 0; i < command.Length; i++)
-        {
-            argPtrs[i] = Marshal.StringToHGlobalAnsi(command[i]);
-        }
-        argPtrs[command.Length] = nint.Zero; // null terminator
-
-        nint argsPtr = Marshal.AllocHGlobal(nint.Size * argPtrs.Length);
-        Marshal.Copy(argPtrs, 0, argsPtr, argPtrs.Length);
-        int result = LibMpv.mpv_command_async(mpv, 0, argsPtr);
-        for (int i = 0; i < command.Length; i++)
-        {
-            if (argPtrs[i] != nint.Zero)
-                Marshal.FreeHGlobal(argPtrs[i]);
-        }
-        Marshal.FreeHGlobal(argsPtr);
         Marshal.FreeHGlobal(paramApiType);
         Marshal.DestroyStructure<MpvOpenglInitParams>(initParamsPtr);
         Marshal.FreeHGlobal(enableAdvancedControlPtr);
     }
-
     private nint GetProcAddress(nint fn_ctx, [MarshalAs(UnmanagedType.LPStr)] string name)
     {
         if (_glInterface is null) throw new Exception("GL Interface was null.");
         return _glInterface.GetProcAddress(name);
     }
-
     private void MpvEvent(nint data)
     {
         while (true)
-
         {
-            nint evPtr = LibMpv.mpv_wait_event(_mpvContext, 0.0);
+            nint evPtr = LibMpv.mpv_wait_event(MpvContext, 0.0);
             if (evPtr == nint.Zero) break;
             MpvEvent ev = Marshal.PtrToStructure<MpvEvent>(evPtr);
 
@@ -175,5 +155,57 @@ public class MediaControl : OpenGlControlBase
                 _redraw = true;
             }
         });
+    }
+
+    public static readonly StyledProperty<string> SourceProperty = AvaloniaProperty.Register<MediaControl, string>(nameof(Source));
+    public string Source
+    {
+        get => GetValue(SourceProperty);
+        set => SetValue(SourceProperty, value);
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == SourceProperty)
+        {
+            if (change.NewValue is null) return;
+            LoadVideo((string)change.NewValue);
+        }
+    }
+    //marshal a command to mpv
+    private void MpvCommand(string[] command)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            nint[] argPtrs = new nint[command.Length + 1];
+            for (int i = 0; i < command.Length; i++)
+            {
+                argPtrs[i] = Marshal.StringToHGlobalAnsi(command[i]);
+            }
+            argPtrs[command.Length] = nint.Zero; 
+            nint argsPtr = Marshal.AllocHGlobal(nint.Size * argPtrs.Length);
+            Marshal.Copy(argPtrs, 0, argsPtr, argPtrs.Length);
+
+            int result = LibMpv.mpv_command_async(MpvContext, 0, argsPtr);
+            for (int i = 0; i < command.Length; i++)
+            {
+                if (argPtrs[i] != nint.Zero)
+                    Marshal.FreeHGlobal(argPtrs[i]);
+            }
+            Marshal.FreeHGlobal(argsPtr);
+        });
+    }
+
+    private void LoadVideo(string source)
+    {
+        string[] command = { "loadfile", source };
+        MpvCommand(command);
+    }
+
+    public void TogglePlayPause()
+    {
+        string[] command = { "cycle", "pause" };
+        MpvCommand(command);
     }
 }
