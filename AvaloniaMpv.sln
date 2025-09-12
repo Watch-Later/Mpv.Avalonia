@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{DF92317B-6A35-4B97-8A87-FB1D1C01AFA2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AvaloniaMpv", "src\AvaloniaMpv\AvaloniaMpv.csproj", "{13F8BAEF-4846-466D-8D9E-CC618DCED7A1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sandbox", "src\Sandbox\Sandbox.csproj", "{F83BB3CE-35A7-4154-87C5-0E17A2C71D31}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{13F8BAEF-4846-466D-8D9E-CC618DCED7A1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{13F8BAEF-4846-466D-8D9E-CC618DCED7A1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{13F8BAEF-4846-466D-8D9E-CC618DCED7A1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{13F8BAEF-4846-466D-8D9E-CC618DCED7A1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F83BB3CE-35A7-4154-87C5-0E17A2C71D31}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F83BB3CE-35A7-4154-87C5-0E17A2C71D31}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F83BB3CE-35A7-4154-87C5-0E17A2C71D31}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F83BB3CE-35A7-4154-87C5-0E17A2C71D31}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{13F8BAEF-4846-466D-8D9E-CC618DCED7A1} = {DF92317B-6A35-4B97-8A87-FB1D1C01AFA2}
+		{F83BB3CE-35A7-4154-87C5-0E17A2C71D31} = {DF92317B-6A35-4B97-8A87-FB1D1C01AFA2}
+	EndGlobalSection
+EndGlobal
