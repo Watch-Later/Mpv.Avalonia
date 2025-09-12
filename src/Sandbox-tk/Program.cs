@@ -1,5 +1,4 @@
-﻿namespace Program;
-using OpenTK.Graphics.OpenGL4;
+﻿using OpenTK.Graphics.OpenGL4;
 using AvaloniaMpv;
 using OpenTK.Windowing.Common;
 using OpenTK.Windowing.Desktop;
@@ -140,7 +139,7 @@ public class Window : GameWindow
             LibMpv.mpv_render_context_render(_mpvRenderContext, paramsP);
             handle.Free();
             Marshal.FreeHGlobal(framebufferPtr);
-            _redraw = true;
+            _redraw = false;
         }
         SwapBuffers(); // show what we drew
     }
