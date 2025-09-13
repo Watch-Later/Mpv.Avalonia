@@ -1,6 +1,7 @@
 namespace AvaloniaMpv;
 using System.Runtime.InteropServices;
 using Avalonia;
+using Avalonia.Interactivity;
 using Avalonia.OpenGL;
 using Avalonia.OpenGL.Controls;
 using Avalonia.Threading;
@@ -84,7 +85,6 @@ public class MediaControl : OpenGlControlBase
         nint initParamsPtr = Marshal.AllocHGlobal(Marshal.SizeOf<MpvOpenglInitParams>());
         Marshal.StructureToPtr(initParams, initParamsPtr, false);
         var paramApiType = Marshal.StringToHGlobalAnsi("opengl");
-
         var enableAdvancedControl = 1;
         var enableAdvancedControlPtr = Marshal.AllocHGlobal(Marshal.SizeOf<int>());
         Marshal.WriteInt32(enableAdvancedControlPtr, enableAdvancedControl);
@@ -116,6 +116,8 @@ public class MediaControl : OpenGlControlBase
         _renderUpdateCallback = MpvRenderUpdate;
         LibMpv.mpv_set_wakeup_callback(mpv, _wakeupCallback, nint.Zero);
         LibMpv.mpv_render_context_set_update_callback(mpv_gl, _renderUpdateCallback, nint.Zero);
+        //monitor some useful playback propertied
+        LibMpv.mpv_observe_property(mpv, 0, "time-pos", MpvFormat.MPV_FORMAT_DOUBLE);
         Marshal.FreeHGlobal(paramApiType);
         Marshal.DestroyStructure<MpvOpenglInitParams>(initParamsPtr);
         Marshal.FreeHGlobal(enableAdvancedControlPtr);
@@ -132,16 +134,15 @@ public class MediaControl : OpenGlControlBase
             nint evPtr = LibMpv.mpv_wait_event(MpvContext, 0.0);
             if (evPtr == nint.Zero) break;
             MpvEvent ev = Marshal.PtrToStructure<MpvEvent>(evPtr);
-
             if (ev.event_id == MpvEventId.MPV_EVENT_NONE) break;
-            if (ev.event_id == MpvEventId.MPV_EVENT_LOG_MESSAGE)
+            if (ev.event_id == MpvEventId.MPV_EVENT_PROPERTY_CHANGE)
             {
-                nint msgPtr = ev.data;
-                var msg = Marshal.PtrToStructure<MpvEventLogMessage>(msgPtr);
-                var text = Marshal.PtrToStringAnsi(msg.text);
-                if (text is null) break;
-                if (text.Contains("DR image"))
-                    Console.WriteLine($"Recieved Log Message {text}");
+                var prop = Marshal.PtrToStructure<MpvEventProperty>(ev.data);
+                var name = Marshal.PtrToStringAnsi(prop.name);
+                if (name == "time-pos" && prop.format == MpvFormat.MPV_FORMAT_DOUBLE)
+                {
+                    var time_pos = Marshal.PtrToStructure<double>(prop.data);
+                }
             }
         }
     }
@@ -156,14 +157,6 @@ public class MediaControl : OpenGlControlBase
             }
         });
     }
-
-    public static readonly StyledProperty<string> SourceProperty = AvaloniaProperty.Register<MediaControl, string>(nameof(Source));
-    public string Source
-    {
-        get => GetValue(SourceProperty);
-        set => SetValue(SourceProperty, value);
-    }
-
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
@@ -174,7 +167,7 @@ public class MediaControl : OpenGlControlBase
         }
     }
     //marshal a command to mpv
-    private void MpvCommand(string[] command)
+    public void MpvCommand(string[] command)
     {
         Dispatcher.UIThread.Post(() =>
         {
@@ -183,11 +176,10 @@ public class MediaControl : OpenGlControlBase
             {
                 argPtrs[i] = Marshal.StringToHGlobalAnsi(command[i]);
             }
-            argPtrs[command.Length] = nint.Zero; 
+            argPtrs[command.Length] = nint.Zero;
             nint argsPtr = Marshal.AllocHGlobal(nint.Size * argPtrs.Length);
             Marshal.Copy(argPtrs, 0, argsPtr, argPtrs.Length);
-
-            int result = LibMpv.mpv_command_async(MpvContext, 0, argsPtr);
+            int result = LibMpv.mpv_command(MpvContext, argsPtr);
             for (int i = 0; i < command.Length; i++)
             {
                 if (argPtrs[i] != nint.Zero)
@@ -197,6 +189,41 @@ public class MediaControl : OpenGlControlBase
         });
     }
 
+    public T? MpvGetProperty<T>(string property, MpvFormat format)
+    {
+        if (typeof(T) == typeof(string) && format == MpvFormat.MPV_FORMAT_STRING)
+        {
+            return (T?)(object?)MpvGetStringProperty(property);
+        }
+
+        var resultPtr = Marshal.AllocHGlobal(Marshal.SizeOf<T>());
+        var ret = LibMpv.mpv_get_property(MpvContext, property, format, resultPtr);
+        if (ret < 0)
+        {
+            Marshal.FreeHGlobal(resultPtr);
+            return default(T);
+        }
+        var result = Marshal.PtrToStructure<T>(resultPtr);
+        Marshal.FreeHGlobal(resultPtr);
+        return result;
+    }
+
+    private string? MpvGetStringProperty(string property)
+    {
+        var resultPtr = Marshal.AllocHGlobal(nint.Size);
+        var ret = LibMpv.mpv_get_property(MpvContext, property, MpvFormat.MPV_FORMAT_STRING, resultPtr);
+        if (ret < 0)
+        {
+            Marshal.FreeHGlobal(resultPtr);
+            return null;
+        }
+
+        var stringPtr = Marshal.ReadIntPtr(resultPtr);
+        var result = Marshal.PtrToStringUTF8(stringPtr);
+        LibMpv.mpv_free(stringPtr);
+        Marshal.FreeHGlobal(resultPtr);
+        return result;
+    }
     private void LoadVideo(string source)
     {
         string[] command = { "loadfile", source };
@@ -207,5 +234,33 @@ public class MediaControl : OpenGlControlBase
     {
         string[] command = { "cycle", "pause" };
         MpvCommand(command);
+    }
+
+    public void SeekTo(double ms)
+    {
+        string[] command = { "seek", $"{ms}", "absolute" };
+        MpvCommand(command);
+    }
+
+    public static readonly StyledProperty<string> SourceProperty = AvaloniaProperty.Register<MediaControl, string>(nameof(Source));
+    public string Source
+    {
+        get => GetValue(SourceProperty);
+        set => SetValue(SourceProperty, value);
+    }
+
+    public static readonly RoutedEvent<MpvPropertyChangedArg> MpvPropertyChangedEvent = RoutedEvent.Register<MediaControl, MpvPropertyChangedArg>(nameof(TimePos), RoutingStrategies.Direct);
+    public event EventHandler<MpvPropertyChangedArg> TimePos
+    {
+        add => AddHandler(MpvPropertyChangedEvent, value);
+        remove => RemoveHandler(MpvPropertyChangedEvent, value);
+    }
+}
+public class MpvPropertyChangedArg : RoutedEventArgs
+{
+    public object? Data { get; set; }
+    public MpvPropertyChangedArg(RoutedEvent routedEvent, object data) : base(routedEvent)
+    {
+        Data = data;
     }
 }

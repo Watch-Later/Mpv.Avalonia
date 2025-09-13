@@ -3,7 +3,6 @@ namespace AvaloniaMpv;
 internal static class LibMpv
 {
     private const string LibName = "mpv"; // TODO: handle platform differences
-
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
     public static extern void mp_clients_init(nint mpctx);
 
@@ -136,7 +135,16 @@ internal static class LibMpv
     public static extern UInt64 mpv_render_context_update(nint ctx);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
-    public static extern UInt64 mpv_render_context_render(nint ctx , nint @params);
+    public static extern UInt64 mpv_render_context_render(nint ctx, nint @params);
+
+    [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int mpv_get_property(nint ctx, [MarshalAs(UnmanagedType.LPStr)] string name, MpvFormat mpvFormat, nint data);
+
+    [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern void mpv_free(nint data);
+
+    [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int mpv_observe_property(nint mpv, UInt64 reply_userdata, [MarshalAs(UnmanagedType.LPStr)] string name, MpvFormat format);
 }
 
 
@@ -198,7 +206,13 @@ public struct MpvEvent
     public UInt64 reply_userdata;
     public nint data;
 };
-
+[StructLayout(LayoutKind.Sequential)]
+public struct MpvEventProperty
+{
+    public nint name;
+    public MpvFormat format;
+    public nint data;
+}
 [StructLayout(LayoutKind.Sequential)]
 public struct MpvOpenGLFramebuffer
 {
@@ -250,3 +264,17 @@ public enum MpvLogLevel
     MPV_LOG_LEVEL_DEBUG = 60,   /// "debug" - very noisy technical information
     MPV_LOG_LEVEL_TRACE = 70,   /// "trace" - extremely noisy
 };
+
+public enum MpvFormat
+{
+    MPV_FORMAT_NONE = 0,
+    MPV_FORMAT_STRING = 1,
+    MPV_FORMAT_OSD_STRING = 2,
+    MPV_FORMAT_FLAG = 3,
+    MPV_FORMAT_INT64 = 4,
+    MPV_FORMAT_DOUBLE = 5,
+    MPV_FORMAT_NODE = 6,
+    MPV_FORMAT_NODE_ARRAY = 7,
+    MPV_FORMAT_NODE_MAP = 8,
+    MPV_FORMAT_BYTE_ARRAY = 9
+}

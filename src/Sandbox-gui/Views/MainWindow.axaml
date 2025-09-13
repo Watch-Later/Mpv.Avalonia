@@ -39,6 +39,8 @@
                 <StackPanel Grid.Row="1" Orientation="Horizontal">
                     <Button Click="LoadVideo">Load</Button>
                     <Button Click="TogglePlayPause">Toggle Play Pause</Button>
+                    <Button Click="GetPause">GetPause</Button>
+                    <Button Click="Seek">Seek</Button>
                 </StackPanel>
             </Grid>
         </StackPanel>
