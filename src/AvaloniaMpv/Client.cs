@@ -145,6 +145,12 @@ internal static class LibMpv
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int mpv_observe_property(nint mpv, UInt64 reply_userdata, [MarshalAs(UnmanagedType.LPStr)] string name, MpvFormat format);
+
+    [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern void mpv_render_context_free(nint ctx);
+
+    [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern void mpv_destroy(nint ctx);
 }
 
 

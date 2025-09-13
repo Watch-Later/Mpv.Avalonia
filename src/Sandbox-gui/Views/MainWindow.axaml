@@ -34,13 +34,15 @@
                     <mv:MediaControl
                         x:Name="mediaCtrl"
                         Width="650"
-                        Height="300" />
+                        Height="300"
+                        MpvPlayer="{Binding Player}" />
                 </Grid>
                 <StackPanel Grid.Row="1" Orientation="Horizontal">
-                    <Button Click="LoadVideo">Load</Button>
-                    <Button Click="TogglePlayPause">Toggle Play Pause</Button>
-                    <Button Click="GetPause">GetPause</Button>
-                    <Button Click="Seek">Seek</Button>
+                    <Button Command="{Binding Load}">Load</Button>
+                    <Button Command="{Binding TogglePlayPause}">Toggle Play Pause</Button>
+                    <Button>GetPause</Button>
+                    <Button Command="{Binding Seek}">Seek</Button>
+                    <Button Command="{Binding Stop}">Stop</Button>
                 </StackPanel>
             </Grid>
         </StackPanel>
