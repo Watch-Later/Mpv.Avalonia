@@ -1,6 +1,10 @@
 Media Player for Avalonia based on MPV + OpenGL.
 See the sandbox project for a usage example.
 
+
+https://github.com/user-attachments/assets/7f532897-75b2-41d1-abfd-50b80c4f3a5c
+
+
 # Benefits
 1. Does not use NativeControlHost, draws with OpenGl instead so more flexible. Works in both Windows and usercontrols with ease and can be drawn over.
 2. MPV is lighter than VLC. Smaller app distribution.
