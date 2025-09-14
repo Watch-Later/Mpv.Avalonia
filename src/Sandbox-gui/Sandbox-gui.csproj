@@ -13,6 +13,12 @@
     <AvaloniaResource Include="Assets\**" />
   </ItemGroup>
 
+    <Target Name="CopyMyFile" AfterTargets="Build">
+      <Copy 
+        SourceFiles="stock-video.mp4" 
+        DestinationFolder="$(OutDir)" 
+      />
+    </Target>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.5" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.5" />

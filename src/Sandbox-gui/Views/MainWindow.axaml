@@ -23,26 +23,50 @@
     </Design.DataContext>
     <ScrollViewer>
         <StackPanel>
-            <TextBlock HorizontalAlignment="Center" FontSize="30">MPV INSIDE AVALONIA WINDOW!</TextBlock>
-            <Grid RowDefinitions="*,*">
-                <Grid>
-                    <!--  Black Panel placed behind the media control  -->
-                    <Panel
-                        Width="650"
-                        Height="300"
-                        Background="Black" />
-                    <mv:MediaControl
-                        x:Name="mediaCtrl"
-                        Width="650"
-                        Height="300"
-                        MpvPlayer="{Binding Player}" />
-                </Grid>
-                <StackPanel Grid.Row="1" Orientation="Horizontal">
-                    <Button Command="{Binding Load}">Load</Button>
-                    <Button Command="{Binding TogglePlayPause}">Toggle Play Pause</Button>
-                    <Button>GetPause</Button>
-                    <Button Command="{Binding Seek}">Seek</Button>
-                    <Button Command="{Binding Stop}">Stop</Button>
+            <Panel
+                Height="60"
+                HorizontalAlignment="Stretch"
+                Background="Purple">
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    FontSize="40"
+                    Foreground="White">
+                    MPV IN AVALONIA
+                </TextBlock>
+            </Panel>
+
+            <Grid
+                Width="1000"
+                Height="550"
+                Margin="0,20,0,0"
+                HorizontalAlignment="Center">
+                <!--  Black background  -->
+                <Panel
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    Background="Black" />
+
+                <!--  OpenGL control  -->
+                <mv:MediaControl
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    MpvPlayer="{Binding Player}" />
+
+                <!--  Video Controls  -->
+                <StackPanel VerticalAlignment="Bottom" Orientation="Horizontal">
+                    <StackPanel.Background>
+                        <SolidColorBrush Opacity="0.5" Color="White" />
+                    </StackPanel.Background>
+                    <Button Command="{Binding Start}">Start</Button>
+                    <Button Command="{Binding TogglePlayPause}">Pause/Play</Button>
+                    <Slider
+                        Maximum="{Binding Duration}"
+                        Minimum="0"
+                        TickFrequency="1"
+                        IsSnapToTickEnabled="False"
+                        Width="500"
+                        x:Name="slider"
+                        Value="{Binding CurrentPos}" />
                 </StackPanel>
             </Grid>
         </StackPanel>

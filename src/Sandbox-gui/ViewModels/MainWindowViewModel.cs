@@ -1,46 +1,55 @@
 ﻿using System;
+using System.IO;
 using AvaloniaMpv;
 using CommunityToolkit.Mvvm.ComponentModel;
-
 namespace Sandbox_gui.ViewModels;
-
 public partial class MainWindowViewModel : ViewModelBase
 {
     public string Greeting { get; } = "Welcome to Avalonia!";
+    public MpvPlayer Player { get; } = new();
+    private bool _updatingPos = false;
+    private double _currentPos = 0;
+    private bool _registeredEvents = false;
 
-    public MpvPlayer Player { get; set; } = new();
+    [ObservableProperty]
+    public double duration = 0;
 
-    public MainWindowViewModel()
+    public double CurrentPos
     {
+        get => _currentPos;
+        set
+        {
+            if (!_updatingPos)
+            {
+                Player.SeekTo(value);
+            }
+            else
+            {
+                SetProperty(ref _currentPos, value);
+            }
+        }
     }
 
-    public void Load()
+    public void TogglePlayPause() => Player.TogglePlayPause();
+    public void Start()
     {
-        Player.RegisterEvent<double>("time-pos", MpvFormat.MPV_FORMAT_DOUBLE);
-        Player.RegisterEvent<int>("pause", MpvFormat.MPV_FORMAT_FLAG);
+        if (!_registeredEvents)
+        {
+            Player.RegisterEvent<double>("duration", MpvFormat.MPV_FORMAT_DOUBLE);
+            Player.RegisterEvent<double>("time-pos", MpvFormat.MPV_FORMAT_DOUBLE);
+            _registeredEvents = true;
+        }
+        Player.StartPlayback(Path.Join(AppContext.BaseDirectory, "stock-video.mp4"));
+        // Player.StartPlayback("/home/noble/Downloads/JUJUTSU KAISEN Opening ｜ Kaikai Kitan by Eve.webm"); //requires yt-dlp
+        Player.GetEvent<double>("duration").Raised += (s, e) =>
+        {
+            Duration = e.Value;
+        };
         Player.GetEvent<double>("time-pos").Raised += (s, e) =>
         {
-            Console.WriteLine($"Playback at {e.Value}");
+            _updatingPos = true;
+            CurrentPos = e.Value;
+            _updatingPos = false;
         };
-        Player.GetEvent<int>("pause").Raised += (s, e) =>
-        {
-            Console.WriteLine($"Pause statuc chaneg to {e.Value}");
-        };
-        Player.StartPlayback("/home/noble/Videos/Superman.2025.1080p.WebDl.English.Msubs.MoviesMod.cafe.mkv");
-    }
-
-    public void Seek()
-    {
-        Player.SeekTo(1000);
-    }
-
-    public void TogglePlayPause()
-    {
-        Player.TogglePlayPause();
-    }
-    public void Stop()
-    {
-        Player.Dispose();
-        Player = new();
     }
 }

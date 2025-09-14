@@ -81,6 +81,7 @@ public class MpvPlayer : IDisposable
         LibMpv.mpv_observe_property(mpv, 0, "time-pos", MpvFormat.MPV_FORMAT_DOUBLE);
         Marshal.FreeHGlobal(paramApiType);
         Marshal.DestroyStructure<MpvOpenglInitParams>(initParamsPtr);
+        Marshal.FreeHGlobal(initParamsPtr);
         Marshal.FreeHGlobal(enableAdvancedControlPtr);
     }
     private void MpvEvent(nint data)
@@ -96,6 +97,7 @@ public class MpvPlayer : IDisposable
                 var prop = Marshal.PtrToStructure<MpvEventProperty>(ev.data);
                 var name = Marshal.PtrToStringAnsi(prop.name);
                 if (name is null) continue;
+                if (prop.data == nint.Zero) continue;
                 if (_mpvPropertyChangeEvents.TryGetValue(name, out (object ev, MpvFormat format) _data))
                 {
                     switch (_data.format)
@@ -120,10 +122,6 @@ public class MpvPlayer : IDisposable
                             }
                     }
                 }
-                if (name == "time-pos" && prop.format == MpvFormat.MPV_FORMAT_DOUBLE)
-                {
-                    var time_pos = Marshal.PtrToStructure<double>(prop.data);
-                }
             }
         }
     }
@@ -141,27 +139,26 @@ public class MpvPlayer : IDisposable
     //marshal a command to mpv
     public void MpvCommand(string[] command)
     {
-        Dispatcher.UIThread.Post(() =>
+        if (_mpvContext == nint.Zero) throw new Exception("Mpv context not properly initialised.");
+        nint[] argPtrs = new nint[command.Length + 1];
+        for (int i = 0; i < command.Length; i++)
         {
-            nint[] argPtrs = new nint[command.Length + 1];
-            for (int i = 0; i < command.Length; i++)
-            {
-                argPtrs[i] = Marshal.StringToHGlobalAnsi(command[i]);
-            }
-            argPtrs[command.Length] = nint.Zero;
-            nint argsPtr = Marshal.AllocHGlobal(nint.Size * argPtrs.Length);
-            Marshal.Copy(argPtrs, 0, argsPtr, argPtrs.Length);
-            int result = LibMpv.mpv_command(_mpvContext, argsPtr);
-            for (int i = 0; i < command.Length; i++)
-            {
-                if (argPtrs[i] != nint.Zero)
-                    Marshal.FreeHGlobal(argPtrs[i]);
-            }
-            Marshal.FreeHGlobal(argsPtr);
-        });
+            argPtrs[i] = Marshal.StringToHGlobalAnsi(command[i]);
+        }
+        argPtrs[command.Length] = nint.Zero;
+        nint argsPtr = Marshal.AllocHGlobal(nint.Size * argPtrs.Length);
+        Marshal.Copy(argPtrs, 0, argsPtr, argPtrs.Length);
+        int result = LibMpv.mpv_command(_mpvContext, argsPtr);
+        for (int i = 0; i < command.Length; i++)
+        {
+            if (argPtrs[i] != nint.Zero)
+                Marshal.FreeHGlobal(argPtrs[i]);
+        }
+        Marshal.FreeHGlobal(argsPtr);
     }
     public void RegisterEvent<T>(string property, MpvFormat format)
     {
+        if (_mpvContext == nint.Zero) throw new Exception("Mpv context not properly initialised.");
         if (format != MpvFormat.MPV_FORMAT_DOUBLE && format != MpvFormat.MPV_FORMAT_FLAG && format != MpvFormat.MPV_FORMAT_INT64) throw new System.NotImplementedException("This format has not implemented");
         if (_mpvPropertyChangeEvents.ContainsKey(property)) throw new InvalidOperationException("Event with this property name is already registered.");
         LibMpv.mpv_observe_property(_mpvContext, 0, property, format);
@@ -179,6 +176,7 @@ public class MpvPlayer : IDisposable
 
     public T? MpvGetProperty<T>(string property, MpvFormat format)
     {
+        if (_mpvContext == nint.Zero) throw new Exception("Mpv context not properly initialised.");
         if (typeof(T) == typeof(string) && format == MpvFormat.MPV_FORMAT_STRING)
         {
             return (T?)(object?)MpvGetStringProperty(property);

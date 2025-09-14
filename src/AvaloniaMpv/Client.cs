@@ -2,7 +2,11 @@
 namespace AvaloniaMpv;
 internal static class LibMpv
 {
-    private const string LibName = "mpv"; // TODO: handle platform differences
+#if WINDOWS
+    private const string LibName = "libmpv2.dll";
+#else
+    private const string LibName = "mpv";
+#endif
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
     public static extern void mp_clients_init(nint mpctx);
 
