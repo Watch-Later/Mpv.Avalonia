@@ -39,8 +39,8 @@ public partial class MainWindowViewModel : ViewModelBase
             Player.RegisterEvent<double>("time-pos", MpvFormat.MPV_FORMAT_DOUBLE);
             _registeredEvents = true;
         }
-        Player.StartPlayback(Path.Join(AppContext.BaseDirectory, "stock-video.mp4"));
-        // Player.StartPlayback("/home/noble/Downloads/JUJUTSU KAISEN Opening ｜ Kaikai Kitan by Eve.webm"); //requires yt-dlp
+        // Player.StartPlayback(Path.Join(AppContext.BaseDirectory, "stock-video.mp4"));
+        Player.StartPlayback("/home/noble/Downloads/JUJUTSU KAISEN Opening ｜ Kaikai Kitan by Eve.webm"); //requires yt-dlp
         Player.GetEvent<double>("duration").Raised += (s, e) =>
         {
             Duration = e.Value;

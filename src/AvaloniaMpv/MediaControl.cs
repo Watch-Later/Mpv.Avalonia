@@ -1,5 +1,7 @@
 namespace AvaloniaMpv;
+using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
+using System.Text;
 using Avalonia;
 using Avalonia.OpenGL;
 using Avalonia.OpenGL.Controls;
@@ -10,6 +12,7 @@ public class MpvPlayer : IDisposable
     private nint _mpvContext = nint.Zero;
     private bool _disposed = false;
     internal nint _mpvRenderContext = nint.Zero;
+    internal ConcurrentQueue<Action> _eventQueue = new();
     private MpvWakeupCallback? _wakeupCallback;
     private MpvOpenglGetProcAddressCallback? _procAddressCallback;
     private MpvRenderUpdateFn? _renderUpdateCallback;
@@ -41,89 +44,88 @@ public class MpvPlayer : IDisposable
         _procAddressCallback = GetProcAddress;
         var initParams = new MpvOpenglInitParams
         {
-            get_proc_address = _procAddressCallback,
+            get_proc_address = Marshal.GetFunctionPointerForDelegate(_procAddressCallback),
             get_proc_address_ctx = nint.Zero,
         };
-        nint initParamsPtr = Marshal.AllocHGlobal(Marshal.SizeOf<MpvOpenglInitParams>());
-        Marshal.StructureToPtr(initParams, initParamsPtr, false);
-        var paramApiType = Marshal.StringToHGlobalAnsi("opengl");
         var enableAdvancedControl = 1;
-        var enableAdvancedControlPtr = Marshal.AllocHGlobal(Marshal.SizeOf<int>());
-        Marshal.WriteInt32(enableAdvancedControlPtr, enableAdvancedControl);
-        MpvRenderParam[] renderParams = {
-            new(){
-                type = mpv_render_param_type.MPV_RENDER_PARAM_API_TYPE, data = paramApiType,
-            },
-            new() {
-                type = mpv_render_param_type.MPV_RENDER_PARAM_OPENGL_INIT_PARAMS , data = initParamsPtr
-            },
-            new() {
-                type = mpv_render_param_type.MPV_RENDER_PARAM_ADVANCED_CONTROL ,
-                 data = enableAdvancedControlPtr
-            },
-            new()
-        };
-        nint mpv_gl;
-        GCHandle handle = GCHandle.Alloc(renderParams, GCHandleType.Pinned);
-        nint pParams = handle.AddrOfPinnedObject();
-        int status = LibMpv.mpv_render_context_create(
-            out mpv_gl,
-            mpv,
-            pParams
-        );
-        _mpvRenderContext = mpv_gl;
-        handle.Free();
-        _wakeupCallback = MpvEvent;
-        _renderUpdateCallback = MpvRenderUpdate;
-        LibMpv.mpv_set_wakeup_callback(mpv, _wakeupCallback, nint.Zero);
-        LibMpv.mpv_render_context_set_update_callback(mpv_gl, _renderUpdateCallback, nint.Zero);
-        //monitor some useful playback propertied
-        LibMpv.mpv_observe_property(mpv, 0, "time-pos", MpvFormat.MPV_FORMAT_DOUBLE);
-        Marshal.FreeHGlobal(paramApiType);
-        Marshal.DestroyStructure<MpvOpenglInitParams>(initParamsPtr);
-        Marshal.FreeHGlobal(initParamsPtr);
-        Marshal.FreeHGlobal(enableAdvancedControlPtr);
-    }
-    private void MpvEvent(nint data)
-    {
-        while (true)
+        byte[] managedParamApiType = Encoding.UTF8.GetBytes("opengl" + "\0");
+        unsafe
         {
-            nint evPtr = LibMpv.mpv_wait_event(_mpvContext, 0.0);
-            if (evPtr == nint.Zero) break;
-            MpvEvent ev = Marshal.PtrToStructure<MpvEvent>(evPtr);
-            if (ev.event_id == MpvEventId.MPV_EVENT_NONE) break;
-            if (ev.event_id == MpvEventId.MPV_EVENT_PROPERTY_CHANGE)
+            fixed (byte* paramApiType = managedParamApiType)
             {
-                var prop = Marshal.PtrToStructure<MpvEventProperty>(ev.data);
-                var name = Marshal.PtrToStringAnsi(prop.name);
-                if (name is null) continue;
-                if (prop.data == nint.Zero) continue;
-                if (_mpvPropertyChangeEvents.TryGetValue(name, out (object ev, MpvFormat format) _data))
+                MpvRenderParam[] renderParams = {
+                new(){
+                    type = mpv_render_param_type.MPV_RENDER_PARAM_API_TYPE, data = (void*)paramApiType,
+                },
+                new() {
+                    type = mpv_render_param_type.MPV_RENDER_PARAM_OPENGL_INIT_PARAMS , data = &initParams
+                },
+                new() {
+                    type = mpv_render_param_type.MPV_RENDER_PARAM_ADVANCED_CONTROL ,
+                     data = &enableAdvancedControl
+                },
+                new()
+            };
+                fixed (MpvRenderParam* ParamPtr = &renderParams[0])
                 {
-                    switch (_data.format)
-                    {
-                        case MpvFormat.MPV_FORMAT_DOUBLE:
-                            {
-                                if (_data.ev is EventSource<double> eventSource)
-                                {
-                                    var value = Marshal.PtrToStructure<double>(prop.data);
-                                    eventSource.Raise(this, value);
-                                }
-                                break;
-                            }
-                        case MpvFormat.MPV_FORMAT_FLAG:
-                            {
-                                if (_data.ev is EventSource<int> eventSource)
-                                {
-                                    var value = Marshal.PtrToStructure<int>(prop.data);
-                                    eventSource.Raise(this, value);
-                                }
-                                break;
-                            }
-                    }
+                    nint mpv_gl;
+                    int status = LibMpv.mpv_render_context_create(
+                        out mpv_gl,
+                        mpv,
+                        ParamPtr
+                    );
+                    _mpvRenderContext = mpv_gl;
+                    _wakeupCallback = MpvEvent;
+                    _renderUpdateCallback = MpvRenderUpdate;
+                    LibMpv.mpv_set_wakeup_callback(mpv, _wakeupCallback, nint.Zero);
+                    LibMpv.mpv_render_context_set_update_callback(mpv_gl, _renderUpdateCallback, nint.Zero);
                 }
             }
         }
+    }
+    private void MpvEvent(nint data)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            while (true)
+            {
+                nint evPtr = LibMpv.mpv_wait_event(_mpvContext, 0.0);
+                if (evPtr == nint.Zero) break;
+                MpvEvent ev = Marshal.PtrToStructure<MpvEvent>(evPtr);
+                if (ev.event_id == MpvEventId.MPV_EVENT_NONE) break;
+                if (ev.event_id == MpvEventId.MPV_EVENT_PROPERTY_CHANGE)
+                {
+                    var prop = Marshal.PtrToStructure<MpvEventProperty>(ev.data);
+                    var name = Marshal.PtrToStringAnsi(prop.name);
+                    if (name is null) continue;
+                    if (prop.data == nint.Zero) continue;
+                    if (_mpvPropertyChangeEvents.TryGetValue(name, out (object ev, MpvFormat format) _data))
+                    {
+                        switch (_data.format)
+                        {
+                            case MpvFormat.MPV_FORMAT_DOUBLE:
+                                {
+                                    if (_data.ev is EventSource<double> eventSource)
+                                    {
+                                        var value = Marshal.PtrToStructure<double>(prop.data);
+                                        eventSource.Raise(this, value);
+                                    }
+                                    break;
+                                }
+                            case MpvFormat.MPV_FORMAT_FLAG:
+                                {
+                                    if (_data.ev is EventSource<int> eventSource)
+                                    {
+                                        var value = Marshal.PtrToStructure<int>(prop.data);
+                                        eventSource.Raise(this, value);
+                                    }
+                                    break;
+                                }
+                        }
+                    }
+                }
+            }
+        });
     }
     private void MpvRenderUpdate(nint data)
     {
@@ -139,22 +141,25 @@ public class MpvPlayer : IDisposable
     //marshal a command to mpv
     public void MpvCommand(string[] command)
     {
-        if (_mpvContext == nint.Zero) throw new Exception("Mpv context not properly initialised.");
-        nint[] argPtrs = new nint[command.Length + 1];
-        for (int i = 0; i < command.Length; i++)
+        Dispatcher.UIThread.Post(() =>
         {
-            argPtrs[i] = Marshal.StringToHGlobalAnsi(command[i]);
-        }
-        argPtrs[command.Length] = nint.Zero;
-        nint argsPtr = Marshal.AllocHGlobal(nint.Size * argPtrs.Length);
-        Marshal.Copy(argPtrs, 0, argsPtr, argPtrs.Length);
-        int result = LibMpv.mpv_command(_mpvContext, argsPtr);
-        for (int i = 0; i < command.Length; i++)
-        {
-            if (argPtrs[i] != nint.Zero)
-                Marshal.FreeHGlobal(argPtrs[i]);
-        }
-        Marshal.FreeHGlobal(argsPtr);
+            if (_mpvContext == nint.Zero) throw new Exception("Mpv context not properly initialised.");
+            nint[] argPtrs = new nint[command.Length + 1];
+            for (int i = 0; i < command.Length; i++)
+            {
+                argPtrs[i] = Marshal.StringToHGlobalAnsi(command[i]);
+            }
+            argPtrs[command.Length] = nint.Zero;
+            nint argsPtr = Marshal.AllocHGlobal(nint.Size * argPtrs.Length);
+            Marshal.Copy(argPtrs, 0, argsPtr, argPtrs.Length);
+            int result = LibMpv.mpv_command(_mpvContext, argsPtr);
+            for (int i = 0; i < command.Length; i++)
+            {
+                if (argPtrs[i] != nint.Zero)
+                    Marshal.FreeHGlobal(argPtrs[i]);
+            }
+            Marshal.FreeHGlobal(argsPtr);
+        });
     }
     public void RegisterEvent<T>(string property, MpvFormat format)
     {
@@ -254,39 +259,35 @@ public class MpvPlayer : IDisposable
 
 public class MediaControl : OpenGlControlBase
 {
-    protected override void OnOpenGlRender(GlInterface gl, int fb)
+    protected unsafe override void OnOpenGlRender(GlInterface gl, int fb)
     {
         if (MpvPlayer._redraw)
         {
             var size = this.Bounds;
             var w = (int)size.Width;
             var h = (int)size.Height;
-            var flip_y = GCHandle.Alloc(1, GCHandleType.Pinned);
+            var flip_y = 1;
             MpvOpenGLFramebuffer framebuffer = new()
             {
                 fbo = fb,
                 width = w,
                 height = h,
             };
-            var framebufferPtr = Marshal.AllocHGlobal(Marshal.SizeOf<MpvOpenGLFramebuffer>());
-            Marshal.StructureToPtr(framebuffer, framebufferPtr, false);
             MpvRenderParam[] param = {
               new() {
                 type = mpv_render_param_type.MPV_RENDER_PARAM_OPENGL_FBO,
-                data = framebufferPtr,
+                data = &framebuffer,
               },
                 new() {
                     type = mpv_render_param_type.MPV_RENDER_PARAM_FLIP_Y,
-                    data = flip_y.AddrOfPinnedObject(),
+                    data = &flip_y,
                 },
                 new()
             };
-            var handle = GCHandle.Alloc(param, GCHandleType.Pinned);
-            var paramsP = handle.AddrOfPinnedObject();
-            LibMpv.mpv_render_context_render(MpvPlayer._mpvRenderContext, paramsP);
-            flip_y.Free();
-            handle.Free();
-            Marshal.FreeHGlobal(framebufferPtr);
+            fixed (MpvRenderParam* p = &param[0])
+            {
+                LibMpv.mpv_render_context_render(MpvPlayer._mpvRenderContext, p);
+            }
             MpvPlayer._redraw = false;
         }
         RequestNextFrameRendering();

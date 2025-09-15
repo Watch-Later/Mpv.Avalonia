@@ -1,6 +1,6 @@
 ﻿using System.Runtime.InteropServices;
 namespace AvaloniaMpv;
-internal static class LibMpv
+internal unsafe static class LibMpv
 {
 #if WINDOWS
     private const string LibName = "libmpv2.dll";
@@ -117,7 +117,7 @@ internal static class LibMpv
     public static extern int mpv_render_context_create(
             out nint res,
             nint mpv,
-            nint @params
+            MpvRenderParam* @params
         );
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
@@ -139,7 +139,7 @@ internal static class LibMpv
     public static extern UInt64 mpv_render_context_update(nint ctx);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
-    public static extern UInt64 mpv_render_context_render(nint ctx, nint @params);
+    public static extern int mpv_render_context_render(nint ctx, MpvRenderParam* @params);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int mpv_get_property(nint ctx, [MarshalAs(UnmanagedType.LPStr)] string name, MpvFormat mpvFormat, nint data);
@@ -183,10 +183,10 @@ public enum mpv_render_param_type
     MPV_RENDER_PARAM_SW_POINTER = 20,
 };
 [StructLayout(LayoutKind.Sequential)]
-public struct MpvRenderParam
+public unsafe struct MpvRenderParam
 {
     public mpv_render_param_type type;
-    public nint data;
+    public void* data;
 }
 
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -204,7 +204,7 @@ public delegate void MpvWakeupCallback(nint data);
 [StructLayout(LayoutKind.Sequential)]
 public struct MpvOpenglInitParams
 {
-    public MpvOpenglGetProcAddressCallback get_proc_address;
+    public nint get_proc_address;
     public nint get_proc_address_ctx;
 }
 

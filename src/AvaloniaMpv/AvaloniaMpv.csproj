@@ -3,6 +3,7 @@
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
@@ -14,10 +15,10 @@
       <DefineConstants>$(DefineConstants);WINDOWS</DefineConstants>
   </PropertyGroup>
 
-    <Target Name="CopyMyFile" AfterTargets="Build">
-      <Copy 
-        SourceFiles="Windows/libmpv-2.dll" 
-        DestinationFolder="$(OutDir)" 
-      />
-    </Target>
+  <Target Name="CopyMyFile" AfterTargets="Build" Condition="'$(OS)' == 'Windows_NT'">
+    <Copy 
+      SourceFiles="Windows/libmpv-2.dll" 
+      DestinationFolder="$(OutDir)" 
+    />
+  </Target>
 </Project>
