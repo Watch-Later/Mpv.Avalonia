@@ -11,13 +11,15 @@ public class MpvPlayer : IDisposable
 {
     private nint _mpvContext = nint.Zero;
     private bool _disposed = false;
-    internal nint _mpvRenderContext = nint.Zero;
-    internal ConcurrentQueue<Action> _eventQueue = new();
     private MpvWakeupCallback? _wakeupCallback;
     private MpvOpenglGetProcAddressCallback? _procAddressCallback;
     private MpvRenderUpdateFn? _renderUpdateCallback;
+    private AutoResetEvent _eventSignal = new(false);
+    internal event Action? OnRenderRequested;
     internal GlInterface? _glInterface = null;
-    internal bool _redraw = false;
+    internal MediaControl? _mediaControl = null;
+    internal nint _mpvRenderContext = nint.Zero;
+    internal ConcurrentQueue<CustomEventType> _eventQueue = new();
     private readonly Dictionary<string, (object, MpvFormat)> _mpvPropertyChangeEvents = new();
 
     public void Dispose()
@@ -82,61 +84,32 @@ public class MpvPlayer : IDisposable
                 }
             }
         }
+        //Start the background worker
+        Task.Run(() => BackgroundWorker());
     }
     private void MpvEvent(nint data)
     {
         Dispatcher.UIThread.Post(() =>
         {
-            while (true)
-            {
-                nint evPtr = LibMpv.mpv_wait_event(_mpvContext, 0.0);
-                if (evPtr == nint.Zero) break;
-                MpvEvent ev = Marshal.PtrToStructure<MpvEvent>(evPtr);
-                if (ev.event_id == MpvEventId.MPV_EVENT_NONE) break;
-                if (ev.event_id == MpvEventId.MPV_EVENT_PROPERTY_CHANGE)
-                {
-                    var prop = Marshal.PtrToStructure<MpvEventProperty>(ev.data);
-                    var name = Marshal.PtrToStringAnsi(prop.name);
-                    if (name is null) continue;
-                    if (prop.data == nint.Zero) continue;
-                    if (_mpvPropertyChangeEvents.TryGetValue(name, out (object ev, MpvFormat format) _data))
-                    {
-                        switch (_data.format)
-                        {
-                            case MpvFormat.MPV_FORMAT_DOUBLE:
-                                {
-                                    if (_data.ev is EventSource<double> eventSource)
-                                    {
-                                        var value = Marshal.PtrToStructure<double>(prop.data);
-                                        eventSource.Raise(this, value);
-                                    }
-                                    break;
-                                }
-                            case MpvFormat.MPV_FORMAT_FLAG:
-                                {
-                                    if (_data.ev is EventSource<int> eventSource)
-                                    {
-                                        var value = Marshal.PtrToStructure<int>(prop.data);
-                                        eventSource.Raise(this, value);
-                                    }
-                                    break;
-                                }
-                        }
-                    }
-                }
-            }
+            _eventSignal.Set();
+            _eventQueue.Enqueue(CustomEventType.Wakeup);
         });
     }
     private void MpvRenderUpdate(nint data)
     {
         Dispatcher.UIThread.Post(() =>
         {
-            var flags = LibMpv.mpv_render_context_update(_mpvRenderContext);
-            if ((flags & (1 << 0)) != 0)
-            {
-                _redraw = true;
-            }
+            _eventSignal.Set();
+            _eventQueue.Enqueue(CustomEventType.Render);
         });
+        // Dispatcher.UIThread.Post(() =>
+        // {
+        //     var flags = LibMpv.mpv_render_context_update(_mpvRenderContext);
+        //     if ((flags & (1 << 0)) != 0)
+        //     {
+        //         _redraw = true;
+        //     }
+        // });
     }
     //marshal a command to mpv
     public void MpvCommand(string[] command)
@@ -220,7 +193,79 @@ public class MpvPlayer : IDisposable
         //this should not be null
         return _glInterface!.GetProcAddress(name);
     }
-
+    private void BackgroundWorker()
+    {
+        while (true)
+        {
+            bool redraw = false;
+            _eventSignal.WaitOne();
+            CustomEventType _ev;
+            while (_eventQueue.TryDequeue(out _ev))
+            {
+                switch (_ev)
+                {
+                    case CustomEventType.Wakeup:
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            while (true)
+                            {
+                                nint evPtr = LibMpv.mpv_wait_event(_mpvContext, 0.0);
+                                if (evPtr == nint.Zero) break;
+                                MpvEvent ev = Marshal.PtrToStructure<MpvEvent>(evPtr);
+                                if (ev.event_id == MpvEventId.MPV_EVENT_NONE) break;
+                                if (ev.event_id == MpvEventId.MPV_EVENT_PROPERTY_CHANGE)
+                                {
+                                    var prop = Marshal.PtrToStructure<MpvEventProperty>(ev.data);
+                                    var name = Marshal.PtrToStringAnsi(prop.name);
+                                    if (name is null) continue;
+                                    if (prop.data == nint.Zero) continue;
+                                    if (_mpvPropertyChangeEvents.TryGetValue(name, out (object ev, MpvFormat format) _data))
+                                    {
+                                        switch (_data.format)
+                                        {
+                                            case MpvFormat.MPV_FORMAT_DOUBLE:
+                                                {
+                                                    if (_data.ev is EventSource<double> eventSource)
+                                                    {
+                                                        var value = Marshal.PtrToStructure<double>(prop.data);
+                                                        eventSource.Raise(this, value);
+                                                    }
+                                                    break;
+                                                }
+                                            case MpvFormat.MPV_FORMAT_FLAG:
+                                                {
+                                                    if (_data.ev is EventSource<int> eventSource)
+                                                    {
+                                                        var value = Marshal.PtrToStructure<int>(prop.data);
+                                                        eventSource.Raise(this, value);
+                                                    }
+                                                    break;
+                                                }
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                        break;
+                    case CustomEventType.Render:
+                        var flags = LibMpv.mpv_render_context_update(_mpvRenderContext);
+                        if ((flags & (1 << 0)) != 0)
+                        {
+                            redraw = true;
+                        }
+                        break;
+                }
+            }
+            if (redraw)
+            {
+                //trigger render here
+                Dispatcher.UIThread.Post(() =>
+                {
+                    _mediaControl?.TriggerRender();
+                });
+            }
+        }
+    }
     public void StartPlayback(string source)
     {
         string[] command = { "loadfile", source };
@@ -246,7 +291,6 @@ public class MpvPlayer : IDisposable
             if (disposing)
             {
                 _glInterface = null;
-                _redraw = false;
             }
             LibMpv.mpv_render_context_free(_mpvRenderContext);
             _mpvRenderContext = nint.Zero;
@@ -261,19 +305,17 @@ public class MediaControl : OpenGlControlBase
 {
     protected unsafe override void OnOpenGlRender(GlInterface gl, int fb)
     {
-        if (MpvPlayer._redraw)
+        var size = this.Bounds;
+        var w = (int)size.Width;
+        var h = (int)size.Height;
+        var flip_y = 1;
+        MpvOpenGLFramebuffer framebuffer = new()
         {
-            var size = this.Bounds;
-            var w = (int)size.Width;
-            var h = (int)size.Height;
-            var flip_y = 1;
-            MpvOpenGLFramebuffer framebuffer = new()
-            {
-                fbo = fb,
-                width = w,
-                height = h,
-            };
-            MpvRenderParam[] param = {
+            fbo = fb,
+            width = w,
+            height = h,
+        };
+        MpvRenderParam[] param = {
               new() {
                 type = mpv_render_param_type.MPV_RENDER_PARAM_OPENGL_FBO,
                 data = &framebuffer,
@@ -284,20 +326,25 @@ public class MediaControl : OpenGlControlBase
                 },
                 new()
             };
-            fixed (MpvRenderParam* p = &param[0])
-            {
-                LibMpv.mpv_render_context_render(MpvPlayer._mpvRenderContext, p);
-            }
-            MpvPlayer._redraw = false;
+        fixed (MpvRenderParam* p = &param[0])
+        {
+            LibMpv.mpv_render_context_render(MpvPlayer._mpvRenderContext, p);
         }
+    }
+
+    internal void TriggerRender()
+    {
         RequestNextFrameRendering();
     }
+
     protected override void OnOpenGlInit(GlInterface gl)
     {
         base.OnOpenGlInit(gl);
         MpvPlayer._glInterface = gl;
+        MpvPlayer._mediaControl = this;
         MpvPlayer.Initialise();
     }
+
     public static readonly StyledProperty<MpvPlayer> MpvPlayerProperty = AvaloniaProperty.Register<MediaControl, MpvPlayer>(nameof(MpvPlayer));
     public MpvPlayer MpvPlayer
     {
@@ -320,4 +367,9 @@ public class EventArgs<T> : EventArgs
 {
     public T Value { get; }
     public EventArgs(T value) { Value = value; }
+}
+internal enum CustomEventType
+{
+    Wakeup,
+    Render,
 }
