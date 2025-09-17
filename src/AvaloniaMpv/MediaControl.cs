@@ -6,6 +6,7 @@ using Avalonia;
 using Avalonia.OpenGL;
 using Avalonia.OpenGL.Controls;
 using Avalonia.Threading;
+using static LibMpv;
 
 public class MpvPlayer : IDisposable
 {
@@ -33,18 +34,18 @@ public class MpvPlayer : IDisposable
     internal void Initialise()
     {
         if (_glInterface is null) { throw new Exception("OpenGL interface was null. Did you bind MpvPlayer to a MediaControl?"); }
-        var mpv = LibMpv.mpv_create();
+        var mpv = mpv_create();
         _mpvContext = mpv;
         if (mpv == nint.Zero)
         {
             throw new Exception("Failed to create mpv context");
         }
-        LibMpv.mpv_set_option_string(mpv, "vo", "libmpv");
-        if (LibMpv.mpv_initialize(mpv) < 0)
+        mpv_set_option_string(mpv, "vo", "libmpv");
+        if (mpv_initialize(mpv) < 0)
         {
             Console.WriteLine("MPV failed to init");
         }
-        LibMpv.mpv_request_log_messages(mpv, "debug");
+        mpv_request_log_messages(mpv, "debug");
         _procAddressCallback = GetProcAddress;
         var initParams = new MpvOpenglInitParams
         {
@@ -73,7 +74,7 @@ public class MpvPlayer : IDisposable
                 fixed (MpvRenderParam* ParamPtr = &renderParams[0])
                 {
                     nint mpv_gl;
-                    int status = LibMpv.mpv_render_context_create(
+                    int status = mpv_render_context_create(
                         out mpv_gl,
                         mpv,
                         ParamPtr
@@ -81,8 +82,8 @@ public class MpvPlayer : IDisposable
                     _mpvRenderContext = mpv_gl;
                     _wakeupCallback = MpvEvent;
                     _renderUpdateCallback = MpvRenderUpdate;
-                    LibMpv.mpv_set_wakeup_callback(mpv, Marshal.GetFunctionPointerForDelegate(_wakeupCallback), nint.Zero);
-                    LibMpv.mpv_render_context_set_update_callback(mpv_gl, Marshal.GetFunctionPointerForDelegate(_renderUpdateCallback), nint.Zero);
+                    mpv_set_wakeup_callback(mpv, Marshal.GetFunctionPointerForDelegate(_wakeupCallback), nint.Zero);
+                    mpv_render_context_set_update_callback(mpv_gl, Marshal.GetFunctionPointerForDelegate(_renderUpdateCallback), nint.Zero);
                 }
             }
         }
@@ -119,7 +120,7 @@ public class MpvPlayer : IDisposable
             argPtrs[command.Length] = nint.Zero;
             nint argsPtr = Marshal.AllocHGlobal(nint.Size * argPtrs.Length);
             Marshal.Copy(argPtrs, 0, argsPtr, argPtrs.Length);
-            int result = LibMpv.mpv_command(_mpvContext, argsPtr);
+            int result = mpv_command(_mpvContext, argsPtr);
             for (int i = 0; i < command.Length; i++)
             {
                 if (argPtrs[i] != nint.Zero)
@@ -133,7 +134,7 @@ public class MpvPlayer : IDisposable
         if (_mpvContext.isNullPtr()) throw new Exception("Mpv context not properly initialised.");
         if (format != MpvFormat.MPV_FORMAT_DOUBLE && format != MpvFormat.MPV_FORMAT_FLAG && format != MpvFormat.MPV_FORMAT_INT64) throw new System.NotImplementedException("This format has not implemented");
         if (_mpvPropertyChangeEvents.ContainsKey(property)) throw new InvalidOperationException("Event with this property name is already registered.");
-        LibMpv.mpv_observe_property(_mpvContext, 0, property, format);
+        mpv_observe_property(_mpvContext, 0, property, format);
         _mpvPropertyChangeEvents[property] = (new EventSource<T>(), format);
     }
 
@@ -155,7 +156,7 @@ public class MpvPlayer : IDisposable
         }
 
         var resultPtr = Marshal.AllocHGlobal(Marshal.SizeOf<T>());
-        var ret = LibMpv.mpv_get_property(_mpvContext, property, format, resultPtr);
+        var ret = mpv_get_property(_mpvContext, property, format, resultPtr);
         if (ret < 0)
         {
             Marshal.FreeHGlobal(resultPtr);
@@ -170,7 +171,7 @@ public class MpvPlayer : IDisposable
     {
         if (_mpvContext.isNullPtr()) throw new Exception("Mpv context not properly initialised.");
         var resultPtr = Marshal.AllocHGlobal(nint.Size);
-        var ret = LibMpv.mpv_get_property(_mpvContext, property, MpvFormat.MPV_FORMAT_STRING, resultPtr);
+        var ret = mpv_get_property(_mpvContext, property, MpvFormat.MPV_FORMAT_STRING, resultPtr);
         if (ret < 0)
         {
             Marshal.FreeHGlobal(resultPtr);
@@ -179,7 +180,7 @@ public class MpvPlayer : IDisposable
 
         var stringPtr = Marshal.ReadIntPtr(resultPtr);
         var result = Marshal.PtrToStringUTF8(stringPtr);
-        LibMpv.mpv_free(stringPtr);
+        mpv_free(stringPtr);
         Marshal.FreeHGlobal(resultPtr);
         return result;
     }
@@ -207,7 +208,7 @@ public class MpvPlayer : IDisposable
                             while (true)
                             {
                                 if (_mpvContext.isNullPtr()) continue;
-                                nint evPtr = LibMpv.mpv_wait_event(_mpvContext, 0.0);
+                                nint evPtr = mpv_wait_event(_mpvContext, 0.0);
                                 if (evPtr == nint.Zero) break;
                                 MpvEvent ev = Marshal.PtrToStructure<MpvEvent>(evPtr);
                                 if (ev.event_id == MpvEventId.MPV_EVENT_NONE) break;
@@ -247,7 +248,7 @@ public class MpvPlayer : IDisposable
                         break;
                     case CustomEventType.Render:
                         if (_mpvRenderContext.isNullPtr()) continue;
-                        var flags = LibMpv.mpv_render_context_update(_mpvRenderContext);
+                        var flags = mpv_render_context_update(_mpvRenderContext);
                         if ((flags & (1 << 0)) != 0)
                         {
                             redraw = true;
@@ -292,27 +293,27 @@ public class MpvPlayer : IDisposable
             {
             }
 
-            LibMpv.mpv_set_wakeup_callback(_mpvContext, nint.Zero, nint.Zero);
+            mpv_set_wakeup_callback(_mpvContext, nint.Zero, nint.Zero);
             if (!_mpvRenderContext.isNullPtr())
-                LibMpv.mpv_render_context_set_update_callback(_mpvRenderContext, nint.Zero, nint.Zero);
+                mpv_render_context_set_update_callback(_mpvRenderContext, nint.Zero, nint.Zero);
             foreach (var p in _mpvPropertyChangeEvents.Values)
             {
                 if (p.Item1 is IDisposable disposable) disposable.Dispose();
             }
             _mpvPropertyChangeEvents.Clear();
-            LibMpv.mpv_unobserve_property(_mpvContext, 0);
+            mpv_unobserve_property(_mpvContext, 0);
             _backgroundWorkerCancellationTokenSource.Cancel();
             _eventSignal.Set();
             _backgroundWorkerTask?.Wait(300);
             _mpvPropertyChangeEvents.Clear();
             if (!_mpvRenderContext.isNullPtr())
             {
-                LibMpv.mpv_render_context_free(_mpvRenderContext);
+                mpv_render_context_free(_mpvRenderContext);
                 _mpvRenderContext = nint.Zero;
             }
             if (!_mpvContext.isNullPtr())
             {
-                LibMpv.mpv_destroy(_mpvContext);
+                mpv_destroy(_mpvContext);
                 _mpvContext = nint.Zero;
             }
             _disposed = true;
@@ -348,7 +349,7 @@ public class MediaControl : OpenGlControlBase
         fixed (MpvRenderParam* p = &param[0])
         {
             if (MpvPlayer._mpvRenderContext.isNullPtr()) return;
-            LibMpv.mpv_render_context_render(MpvPlayer._mpvRenderContext, p);
+            mpv_render_context_render(MpvPlayer._mpvRenderContext, p);
         }
     }
 
