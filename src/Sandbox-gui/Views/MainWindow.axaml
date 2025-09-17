@@ -59,13 +59,14 @@
                     </StackPanel.Background>
                     <Button Command="{Binding Start}">Start</Button>
                     <Button Command="{Binding TogglePlayPause}">Pause/Play</Button>
+                    <Button Command="{Binding Dispose}">Dispose</Button>
                     <Slider
+                        x:Name="slider"
+                        Width="500"
+                        IsSnapToTickEnabled="False"
                         Maximum="{Binding Duration}"
                         Minimum="0"
                         TickFrequency="1"
-                        IsSnapToTickEnabled="False"
-                        Width="500"
-                        x:Name="slider"
                         Value="{Binding CurrentPos}" />
                 </StackPanel>
             </Grid>

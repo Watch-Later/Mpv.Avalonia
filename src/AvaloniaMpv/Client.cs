@@ -127,13 +127,13 @@ internal unsafe static class LibMpv
     public static extern int mpv_command(nint ctx, nint args);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
-    public static extern void mpv_set_wakeup_callback(nint ctx, MpvWakeupCallback cb, nint d);
+    public static extern void mpv_set_wakeup_callback(nint ctx, nint cb, nint d);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
     public static extern nint mpv_wait_event(nint ctx, double timeout);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
-    public static extern void mpv_render_context_set_update_callback(nint ctx, MpvRenderUpdateFn callback, nint callback_ctx);
+    public static extern void mpv_render_context_set_update_callback(nint ctx, nint callback, nint callback_ctx);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
     public static extern UInt64 mpv_render_context_update(nint ctx);
@@ -149,6 +149,9 @@ internal unsafe static class LibMpv
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int mpv_observe_property(nint mpv, UInt64 reply_userdata, [MarshalAs(UnmanagedType.LPStr)] string name, MpvFormat format);
+
+    [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int mpv_unobserve_property(nint mpv, UInt64 reply_userdata);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
     public static extern void mpv_render_context_free(nint ctx);

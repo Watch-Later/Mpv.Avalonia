@@ -6,7 +6,7 @@ namespace Sandbox_gui.ViewModels;
 public partial class MainWindowViewModel : ViewModelBase
 {
     public string Greeting { get; } = "Welcome to Avalonia!";
-    public MpvPlayer Player { get; } = new();
+    public MpvPlayer? Player { get; set; } = new();
     private bool _updatingPos = false;
     private double _currentPos = 0;
     private bool _registeredEvents = false;
@@ -21,7 +21,7 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             if (!_updatingPos)
             {
-                Player.SeekTo(value);
+                Player?.SeekTo(value);
             }
             else
             {
@@ -30,26 +30,32 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    public void TogglePlayPause() => Player.TogglePlayPause();
+    public void TogglePlayPause() => Player?.TogglePlayPause();
     public void Start()
     {
         if (!_registeredEvents)
         {
-            Player.RegisterEvent<double>("duration", MpvFormat.MPV_FORMAT_DOUBLE);
-            Player.RegisterEvent<double>("time-pos", MpvFormat.MPV_FORMAT_DOUBLE);
+            Player?.RegisterEvent<double>("duration", MpvFormat.MPV_FORMAT_DOUBLE);
+            Player?.RegisterEvent<double>("time-pos", MpvFormat.MPV_FORMAT_DOUBLE);
             _registeredEvents = true;
         }
-        Player.StartPlayback(Path.Join(AppContext.BaseDirectory, "stock-video.mp4"));
-        // Player.StartPlayback("/home/noble/Videos/Superman.2025.1080p.WebDl.English.Msubs.MoviesMod.cafe.mkv"); //requires yt-dlp
-        Player.GetEvent<double>("duration").Raised += (s, e) =>
+        Player?.StartPlayback(Path.Join(AppContext.BaseDirectory, "stock-video.mp4"));
+        // Player?.StartPlayback("/home/noble/Downloads/JUJUTSU KAISEN Opening ｜ Kaikai Kitan by Eve.webm"); //requires yt-dlp
+        Player!.GetEvent<double>("duration").Raised += (s, e) =>
         {
             Duration = e.Value;
         };
-        Player.GetEvent<double>("time-pos").Raised += (s, e) =>
+        Player!.GetEvent<double>("time-pos").Raised += (s, e) =>
         {
             _updatingPos = true;
             CurrentPos = e.Value;
             _updatingPos = false;
         };
+    }
+    public void Dispose()
+    {
+        Player?.Dispose();
+        Player = null;
+        GC.Collect();
     }
 }
