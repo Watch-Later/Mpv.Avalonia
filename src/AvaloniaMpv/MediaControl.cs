@@ -7,7 +7,6 @@ using Avalonia.OpenGL;
 using Avalonia.OpenGL.Controls;
 using Avalonia.Threading;
 using static LibMpv;
-
 public class MpvPlayer : IDisposable
 {
     private nint _mpvContext = nint.Zero;
@@ -34,19 +33,28 @@ public class MpvPlayer : IDisposable
     internal void Initialise()
     {
         if (_glInterface is null) { throw new Exception("OpenGL interface was null. Did you bind MpvPlayer to a MediaControl?"); }
-        var mpv = mpv_create();
-        _mpvContext = mpv;
-        if (mpv == nint.Zero)
+        //possibly reusing this player.
+        if (_mpvContext.isNullPtr())
         {
-            throw new Exception("Failed to create mpv context");
+            var mpv = mpv_create();
+            _mpvContext = mpv;
+            if (mpv.isNullPtr())
+            {
+                throw new Exception("Failed to create mpv context");
+            }
+            mpv_set_option_string(mpv, "vo", "libmpv");
+            if (mpv_initialize(mpv) < 0)
+            {
+                Console.WriteLine("MPV failed to init");
+            }
+            mpv_request_log_messages(mpv, "debug");
         }
-        mpv_set_option_string(mpv, "vo", "libmpv");
-        if (mpv_initialize(mpv) < 0)
-        {
-            Console.WriteLine("MPV failed to init");
-        }
-        mpv_request_log_messages(mpv, "debug");
         _procAddressCallback = GetProcAddress;
+        //possibly reusing this player, only thing that should be replaced is the mpv openGL context;
+        if (!_mpvRenderContext.isNullPtr())
+        {
+            mpv_render_context_free(_mpvRenderContext);
+        }
         var initParams = new MpvOpenglInitParams
         {
             get_proc_address = Marshal.GetFunctionPointerForDelegate(_procAddressCallback),
@@ -76,13 +84,13 @@ public class MpvPlayer : IDisposable
                     nint mpv_gl;
                     int status = mpv_render_context_create(
                         out mpv_gl,
-                        mpv,
+                        _mpvContext,
                         ParamPtr
                     );
                     _mpvRenderContext = mpv_gl;
                     _wakeupCallback = MpvEvent;
                     _renderUpdateCallback = MpvRenderUpdate;
-                    mpv_set_wakeup_callback(mpv, Marshal.GetFunctionPointerForDelegate(_wakeupCallback), nint.Zero);
+                    mpv_set_wakeup_callback(_mpvContext, Marshal.GetFunctionPointerForDelegate(_wakeupCallback), nint.Zero);
                     mpv_render_context_set_update_callback(mpv_gl, Marshal.GetFunctionPointerForDelegate(_renderUpdateCallback), nint.Zero);
                 }
             }

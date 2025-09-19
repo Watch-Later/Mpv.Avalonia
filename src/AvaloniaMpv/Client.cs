@@ -3,7 +3,7 @@ namespace AvaloniaMpv;
 internal unsafe static class LibMpv
 {
 #if WINDOWS
-    private const string LibName = "libmpv2.dll";
+    private const string LibName = "libmpv-2.dll";
 #else
     private const string LibName = "mpv";
 #endif
