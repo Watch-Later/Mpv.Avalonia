@@ -7,6 +7,7 @@ using Avalonia.OpenGL;
 using Avalonia.OpenGL.Controls;
 using Avalonia.Threading;
 using static LibMpv;
+
 public class MpvPlayer : IDisposable
 {
     private nint _mpvContext = nint.Zero;
@@ -17,7 +18,6 @@ public class MpvPlayer : IDisposable
     private AutoResetEvent _eventSignal = new(false);
     private Task? _backgroundWorkerTask = null;
     private CancellationTokenSource _backgroundWorkerCancellationTokenSource = new();
-    internal event Action? OnRenderRequested;
     internal GlInterface? _glInterface = null;
     internal MediaControl? _mediaControl = null;
     internal nint _mpvRenderContext = nint.Zero;
@@ -29,26 +29,25 @@ public class MpvPlayer : IDisposable
         Dispose(true);
         GC.SuppressFinalize(this);
     }
+    public MpvPlayer()
+    {
 
+        var mpv = mpv_create();
+        _mpvContext = mpv;
+        if (mpv.isNullPtr())
+        {
+            throw new Exception("Failed to create mpv context");
+        }
+        mpv_set_option_string(mpv, "vo", "libmpv");
+        if (mpv_initialize(mpv) < 0)
+        {
+            Console.WriteLine("MPV failed to init");
+        }
+        mpv_request_log_messages(mpv, "trace");
+    }
     internal void Initialise()
     {
         if (_glInterface is null) { throw new Exception("OpenGL interface was null. Did you bind MpvPlayer to a MediaControl?"); }
-        //possibly reusing this player.
-        if (_mpvContext.isNullPtr())
-        {
-            var mpv = mpv_create();
-            _mpvContext = mpv;
-            if (mpv.isNullPtr())
-            {
-                throw new Exception("Failed to create mpv context");
-            }
-            mpv_set_option_string(mpv, "vo", "libmpv");
-            if (mpv_initialize(mpv) < 0)
-            {
-                Console.WriteLine("MPV failed to init");
-            }
-            mpv_request_log_messages(mpv, "debug");
-        }
         _procAddressCallback = GetProcAddress;
         //possibly reusing this player, only thing that should be replaced is the mpv openGL context;
         if (!_mpvRenderContext.isNullPtr())
@@ -185,7 +184,6 @@ public class MpvPlayer : IDisposable
             Marshal.FreeHGlobal(resultPtr);
             return null;
         }
-
         var stringPtr = Marshal.ReadIntPtr(resultPtr);
         var result = Marshal.PtrToStringUTF8(stringPtr);
         mpv_free(stringPtr);
@@ -389,7 +387,6 @@ public class EventSource<T>
     public event EventHandler<EventArgs<T>>? Raised;
     internal void Raise(object sender, T value)
           => Raised?.Invoke(sender, new EventArgs<T>(value));
-
 }
 
 public class EventArgs<T> : EventArgs
