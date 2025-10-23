@@ -38,6 +38,8 @@ public class MpvPlayer : IDisposable
         {
             throw new Exception("Failed to create mpv context");
         }
+        // Ensure OpenGL render API is used across platforms
+        mpv_set_option_string(mpv, "gpu-api", "opengl");
         mpv_set_option_string(mpv, "vo", "libmpv");
         if (mpv_initialize(mpv) < 0)
         {
@@ -252,6 +254,14 @@ public class MpvPlayer : IDisposable
                                         }
                                     }
                                 }
+                                else if (ev.event_id == MpvEventId.MPV_EVENT_LOG_MESSAGE)
+                                {
+                                    var log = Marshal.PtrToStructure<MpvEventLogMessage>(ev.data);
+                                    var prefix = Marshal.PtrToStringUTF8(log.prefix) ?? string.Empty;
+                                    var level = Marshal.PtrToStringUTF8(log.level) ?? string.Empty;
+                                    var text = Marshal.PtrToStringUTF8(log.text) ?? string.Empty;
+                                    Console.WriteLine($"[mpv {level}] {prefix}: {text}");
+                                }
                             }
                         });
                         break;
@@ -335,8 +345,10 @@ public class MediaControl : OpenGlControlBase
     protected unsafe override void OnOpenGlRender(GlInterface gl, int fb)
     {
         var size = this.Bounds;
-        var w = (int)size.Width;
-        var h = (int)size.Height;
+        // Use pixel size for retina/HiDPI displays (e.g., macOS)
+        var scale = this.VisualRoot?.RenderScaling ?? 1.0;
+        var w = Math.Max(1, (int)Math.Round(size.Width * scale));
+        var h = Math.Max(1, (int)Math.Round(size.Height * scale));
         var flip_y = 1;
         MpvOpenGLFramebuffer framebuffer = new()
         {
