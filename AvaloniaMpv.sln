@@ -7,8 +7,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{DF92317B-6A3
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AvaloniaMpv", "src\AvaloniaMpv\AvaloniaMpv.csproj", "{13F8BAEF-4846-466D-8D9E-CC618DCED7A1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sandbox", "src\Sandbox\Sandbox.csproj", "{F83BB3CE-35A7-4154-87C5-0E17A2C71D31}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sandbox-gui", "src\Sandbox-gui\Sandbox-gui.csproj", "{3E4BB930-DEDB-4F8A-8946-C682F0703FE6}"
 EndProject
 Global
@@ -16,26 +14,24 @@ Global
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
-	GlobalSection(SolutionProperties) = preSolution
-		HideSolutionNode = FALSE
-	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{13F8BAEF-4846-466D-8D9E-CC618DCED7A1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{13F8BAEF-4846-466D-8D9E-CC618DCED7A1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{13F8BAEF-4846-466D-8D9E-CC618DCED7A1}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{13F8BAEF-4846-466D-8D9E-CC618DCED7A1}.Release|Any CPU.Build.0 = Release|Any CPU
-		{F83BB3CE-35A7-4154-87C5-0E17A2C71D31}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{F83BB3CE-35A7-4154-87C5-0E17A2C71D31}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{F83BB3CE-35A7-4154-87C5-0E17A2C71D31}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{F83BB3CE-35A7-4154-87C5-0E17A2C71D31}.Release|Any CPU.Build.0 = Release|Any CPU
 		{3E4BB930-DEDB-4F8A-8946-C682F0703FE6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{3E4BB930-DEDB-4F8A-8946-C682F0703FE6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3E4BB930-DEDB-4F8A-8946-C682F0703FE6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3E4BB930-DEDB-4F8A-8946-C682F0703FE6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{13F8BAEF-4846-466D-8D9E-CC618DCED7A1} = {DF92317B-6A35-4B97-8A87-FB1D1C01AFA2}
-		{F83BB3CE-35A7-4154-87C5-0E17A2C71D31} = {DF92317B-6A35-4B97-8A87-FB1D1C01AFA2}
 		{3E4BB930-DEDB-4F8A-8946-C682F0703FE6} = {DF92317B-6A35-4B97-8A87-FB1D1C01AFA2}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {A9731478-6F70-4093-91FF-12548477A617}
 	EndGlobalSection
 EndGlobal

@@ -8,6 +8,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Windows\libmpv-2.dll" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Windows\libmpv-2.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.5" />
   </ItemGroup>
 
@@ -16,9 +26,6 @@
   </PropertyGroup>
 
   <Target Name="CopyMyFile" AfterTargets="Build" Condition="'$(OS)' == 'Windows_NT'">
-    <Copy 
-      SourceFiles="Windows/libmpv-2.dll" 
-      DestinationFolder="$(OutDir)" 
-    />
+    <Copy SourceFiles="Windows/libmpv-2.dll" DestinationFolder="$(OutDir)" />
   </Target>
 </Project>

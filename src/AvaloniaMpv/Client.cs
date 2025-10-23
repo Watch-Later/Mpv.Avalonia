@@ -1,21 +1,145 @@
-﻿using System.Runtime.InteropServices;
+﻿using System;
+using System.IO;
+using System.Runtime.InteropServices;
+
 namespace AvaloniaMpv;
+
 internal unsafe static class LibMpv
 {
-#if WINDOWS
-    private const string LibName = "libmpv-2.dll";
-#else
+    // Use a logical library name and resolve per-OS at runtime.
     private const string LibName = "mpv";
-#endif
+
+    static LibMpv()
+    {
+        // Ensure we can load the correct libmpv name on each OS.
+        NativeLibrary.SetDllImportResolver(typeof(LibMpv).Assembly, (name, assembly, path) =>
+        {
+            if (!string.Equals(name, LibName, StringComparison.Ordinal))
+            {
+                return nint.Zero;
+            }
+
+            // Try platform-specific candidates in order.
+            if (OperatingSystem.IsWindows())
+            {
+                string[] candidates = [
+                    "libmpv-2.dll", // common on Windows builds
+                    "mpv-2.dll",
+                    "libmpv.dll",
+                    "mpv.dll"
+                ];
+                foreach (var c in candidates)
+                {
+                    if (NativeLibrary.TryLoad(c, assembly, path, out var handle))
+                    {
+                        return handle;
+                    }
+                }
+            }
+            else if (OperatingSystem.IsLinux())
+            {
+                string[] candidates = [
+                    "libmpv.so.2", // soname on most distros
+                    "libmpv.so"
+                ];
+
+                // Preferred: try by soname/name using default search rules first
+                foreach (var c in candidates)
+                {
+                    if (NativeLibrary.TryLoad(c, assembly, path, out var handle) || NativeLibrary.TryLoad(c, out handle))
+                    {
+                        return handle;
+                    }
+                }
+
+                // Then try explicit directories provided for Linux
+                string[] linuxDirs = [
+                    "/lib64",
+                    "/usr/lib64",
+                    "/lib",
+                    "/usr/lib",
+                    "/lib/x86_64-linux-gnu",
+                    "/usr/lib/x86_64-linux-gnu",
+                    "/usr/local/lib"
+                ];
+
+                foreach (var dir in linuxDirs)
+                {
+                    foreach (var c in candidates)
+                    {
+                        try
+                        {
+                            var full = Path.Combine(dir, c);
+                            if (NativeLibrary.TryLoad(full, out var handle))
+                            {
+                                return handle;
+                            }
+                        }
+                        catch
+                        {
+                            // ignore invalid paths / permission issues and continue
+                        }
+                    }
+                }
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                string[] candidates = [
+                    "libmpv.2.dylib", // Homebrew/typical soname
+                    "libmpv.dylib"
+                ];
+
+                // Try default resolution first
+                foreach (var c in candidates)
+                {
+                    if (NativeLibrary.TryLoad(c, assembly, path, out var handle) || NativeLibrary.TryLoad(c, out handle))
+                    {
+                        return handle;
+                    }
+                }
+
+                // Then try explicit directories provided for macOS
+                string[] macDirs = [
+                    "/Applications/Subtitle Edit.app/Contents/Frameworks",
+                    "/opt/local/lib",
+                    "/usr/local/lib",
+                    "/opt/homebrew/lib",
+                    "/opt/lib"
+                ];
+
+                foreach (var dir in macDirs)
+                {
+                    foreach (var c in candidates)
+                    {
+                        try
+                        {
+                            var full = Path.Combine(dir, c);
+                            if (NativeLibrary.TryLoad(full, out var handle))
+                            {
+                                return handle;
+                            }
+                        }
+                        catch
+                        {
+                            // ignore and continue trying other paths
+                        }
+                    }
+                }
+            }
+
+            return nint.Zero; // Let runtime fall back (will throw DllNotFoundException)
+        });
+    }
+
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
     public static extern void mp_clients_init(nint mpctx);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int mpv_set_option_string(
        nint ctx,
-       [MarshalAs(UnmanagedType.LPStr)] string name,
-       [MarshalAs(UnmanagedType.LPStr)] string data
-   );
+       [MarshalAs(UnmanagedType.LPUTF8Str)] string name,
+       [MarshalAs(UnmanagedType.LPUTF8Str)] string data
+    );
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int mpv_initialize(nint ctx);
@@ -47,7 +171,7 @@ internal unsafe static class LibMpv
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int mp_client_send_event(
         nint mpctx,
-        [MarshalAs(UnmanagedType.LPStr)] string client_name,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string client_name,
         ulong reply_userdata,
         int @event,
         nint data);
@@ -55,20 +179,20 @@ internal unsafe static class LibMpv
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int mp_client_send_event_dup(
         nint mpctx,
-        [MarshalAs(UnmanagedType.LPStr)] string client_name,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string client_name,
         int @event,
         nint data);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
     public static extern void mp_client_property_change(
         nint mpctx,
-        [MarshalAs(UnmanagedType.LPStr)] string name);
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string name);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
     public static extern void mp_client_send_property_changes(nint mpctx);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
-    public static extern nint mp_new_client(nint clients, [MarshalAs(UnmanagedType.LPStr)] string name);
+    public static extern nint mp_new_client(nint clients, [MarshalAs(UnmanagedType.LPUTF8Str)] string name);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
     public static extern void mp_client_set_weak(nint ctx);
@@ -98,19 +222,19 @@ internal unsafe static class LibMpv
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate int mpv_stream_cb_open_ro_fn(
         nint user_data,
-        [MarshalAs(UnmanagedType.LPStr)] string uri,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string uri,
         out nint stream);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool mp_streamcb_lookup(
         nint g,
-        [MarshalAs(UnmanagedType.LPStr)] string protocol,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string protocol,
         out nint out_user_data,
         out mpv_stream_cb_open_ro_fn out_fn);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
-    public static extern int mpv_request_log_messages(nint ctx, [MarshalAs(UnmanagedType.LPStr)] string min_level);
+    public static extern int mpv_request_log_messages(nint ctx, [MarshalAs(UnmanagedType.LPUTF8Str)] string min_level);
 
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
@@ -142,13 +266,13 @@ internal unsafe static class LibMpv
     public static extern int mpv_render_context_render(nint ctx, MpvRenderParam* @params);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
-    public static extern int mpv_get_property(nint ctx, [MarshalAs(UnmanagedType.LPStr)] string name, MpvFormat mpvFormat, nint data);
+    public static extern int mpv_get_property(nint ctx, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, MpvFormat mpvFormat, nint data);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
     public static extern void mpv_free(nint data);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
-    public static extern int mpv_observe_property(nint mpv, UInt64 reply_userdata, [MarshalAs(UnmanagedType.LPStr)] string name, MpvFormat format);
+    public static extern int mpv_observe_property(nint mpv, UInt64 reply_userdata, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, MpvFormat format);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int mpv_unobserve_property(nint mpv, UInt64 reply_userdata);
@@ -195,7 +319,7 @@ public unsafe struct MpvRenderParam
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 public delegate nint MpvOpenglGetProcAddressCallback(
     nint ctx,
-    [MarshalAs(UnmanagedType.LPStr)] string name
+    [MarshalAs(UnmanagedType.LPUTF8Str)] string name
 );
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 public delegate void MpvRenderUpdateFn(

@@ -1,4 +1,5 @@
 namespace AvaloniaMpv;
+
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -31,7 +32,6 @@ public class MpvPlayer : IDisposable
     }
     public MpvPlayer()
     {
-
         var mpv = mpv_create();
         _mpvContext = mpv;
         if (mpv.isNullPtr())
@@ -47,7 +47,10 @@ public class MpvPlayer : IDisposable
     }
     internal void Initialise()
     {
-        if (_glInterface is null) { throw new Exception("OpenGL interface was null. Did you bind MpvPlayer to a MediaControl?"); }
+        if (_glInterface is null) 
+        { 
+            throw new Exception("OpenGL interface was null. Did you bind MpvPlayer to a MediaControl?"); 
+        }
         _procAddressCallback = GetProcAddress;
         //possibly reusing this player, only thing that should be replaced is the mpv openGL context;
         if (!_mpvRenderContext.isNullPtr())
@@ -122,7 +125,7 @@ public class MpvPlayer : IDisposable
             nint[] argPtrs = new nint[command.Length + 1];
             for (int i = 0; i < command.Length; i++)
             {
-                argPtrs[i] = Marshal.StringToHGlobalAnsi(command[i]);
+                argPtrs[i] = Marshal.StringToCoTaskMemUTF8(command[i]);
             }
             argPtrs[command.Length] = nint.Zero;
             nint argsPtr = Marshal.AllocHGlobal(nint.Size * argPtrs.Length);
@@ -131,7 +134,7 @@ public class MpvPlayer : IDisposable
             for (int i = 0; i < command.Length; i++)
             {
                 if (argPtrs[i] != nint.Zero)
-                    Marshal.FreeHGlobal(argPtrs[i]);
+                    Marshal.FreeCoTaskMem(argPtrs[i]);
             }
             Marshal.FreeHGlobal(argsPtr);
         });
@@ -190,7 +193,7 @@ public class MpvPlayer : IDisposable
         Marshal.FreeHGlobal(resultPtr);
         return result;
     }
-    private nint GetProcAddress(nint fn_ctx, [MarshalAs(UnmanagedType.LPStr)] string name)
+    private nint GetProcAddress(nint fn_ctx, string name)
     {
         //this should not be null
         return _glInterface!.GetProcAddress(name);
@@ -221,7 +224,7 @@ public class MpvPlayer : IDisposable
                                 if (ev.event_id == MpvEventId.MPV_EVENT_PROPERTY_CHANGE)
                                 {
                                     var prop = Marshal.PtrToStructure<MpvEventProperty>(ev.data);
-                                    var name = Marshal.PtrToStringAnsi(prop.name);
+                                    var name = Marshal.PtrToStringUTF8(prop.name);
                                     if (name is null) continue;
                                     if (prop.data == nint.Zero) continue;
                                     if (_mpvPropertyChangeEvents.TryGetValue(name, out (object ev, MpvFormat format) _data))

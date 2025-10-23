@@ -9,16 +9,19 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="Models\" />
     <AvaloniaResource Include="Assets\**" />
   </ItemGroup>
 
     <Target Name="CopyMyFile" AfterTargets="Build">
-      <Copy 
-        SourceFiles="stock-video.mp4" 
-        DestinationFolder="$(OutDir)" 
-      />
+      <Copy SourceFiles="stock-video.mp4" DestinationFolder="$(OutDir)" />
     </Target>
+
+    <ItemGroup>
+      <AvaloniaXaml Remove="Models\**" />
+      <Compile Remove="Models\**" />
+      <EmbeddedResource Remove="Models\**" />
+      <None Remove="Models\**" />
+    </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.5" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.5" />
