@@ -40,8 +40,7 @@ public class MpvPlayer : IDisposable
         }
         // Use libmpv render API for embedding
         mpv_set_option_string(mpv, "vo", "libmpv");
-        // Ensure OpenGL render API
-        mpv_set_option_string(mpv, "gpu-api", "opengl");
+        // Don't force gpu-api here; render backend is selected via API_TYPE in render params
 
         if (mpv_initialize(mpv) < 0)
         {
@@ -61,50 +60,81 @@ public class MpvPlayer : IDisposable
         {
             mpv_render_context_free(_mpvRenderContext);
         }
-        var initParams = new MpvOpenglInitParams
-        {
-            get_proc_address = Marshal.GetFunctionPointerForDelegate(_procAddressCallback),
-            get_proc_address_ctx = nint.Zero,
-        };
-        var enableAdvancedControl = 1;
-        byte[] managedParamApiType = Encoding.UTF8.GetBytes("opengl\0");
+
+        // Try creating a render context with desktop OpenGL, then fallback to OpenGL ES
         unsafe
         {
-            fixed (byte* paramApiType = managedParamApiType)
+            nint ctx = nint.Zero;
+            // Try desktop OpenGL
             {
-                MpvRenderParam[] renderParams = {
-                new(){
-                    type = mpv_render_param_type.MPV_RENDER_PARAM_API_TYPE, data = (void*)paramApiType,
-                },
-                new() {
-                    type = mpv_render_param_type.MPV_RENDER_PARAM_OPENGL_INIT_PARAMS , data = &initParams
-                },
-                new() {
-                    type = mpv_render_param_type.MPV_RENDER_PARAM_ADVANCED_CONTROL ,
-                     data = &enableAdvancedControl
-                },
-                new()
-            };
-                fixed (MpvRenderParam* ParamPtr = &renderParams[0])
+                var initParams = new MpvOpenglInitParams
                 {
-                    nint mpv_gl;
-                    int status = mpv_render_context_create(
-                        out mpv_gl,
-                        _mpvContext,
-                        ParamPtr
-                    );
-                    if (status < 0)
+                    get_proc_address = Marshal.GetFunctionPointerForDelegate(_procAddressCallback),
+                    get_proc_address_ctx = nint.Zero,
+                };
+                var enableAdvancedControl = 1;
+                byte[] managedParamApiType = Encoding.UTF8.GetBytes("opengl\0");
+                fixed (byte* paramApiType = managedParamApiType)
+                {
+                    MpvRenderParam[] renderParams = {
+                        new(){ type = mpv_render_param_type.MPV_RENDER_PARAM_API_TYPE, data = (void*)paramApiType },
+                        new(){ type = mpv_render_param_type.MPV_RENDER_PARAM_OPENGL_INIT_PARAMS , data = &initParams },
+                        new(){ type = mpv_render_param_type.MPV_RENDER_PARAM_ADVANCED_CONTROL , data = &enableAdvancedControl },
+                        new()
+                    };
+                    fixed (MpvRenderParam* ParamPtr = &renderParams[0])
                     {
-                        Console.WriteLine($"mpv_render_context_create failed: {status}");
+                        int status = mpv_render_context_create(out ctx, _mpvContext, ParamPtr);
+                        if (status < 0)
+                        {
+                            Console.WriteLine($"mpv_render_context_create failed with api 'opengl': {status}");
+                            ctx = nint.Zero;
+                        }
                     }
-                    _mpvRenderContext = mpv_gl;
-                    _wakeupCallback = MpvEvent;
-                    _renderUpdateCallback = MpvRenderUpdate;
-                    mpv_set_wakeup_callback(_mpvContext, Marshal.GetFunctionPointerForDelegate(_wakeupCallback), nint.Zero);
-                    mpv_render_context_set_update_callback(mpv_gl, Marshal.GetFunctionPointerForDelegate(_renderUpdateCallback), nint.Zero);
                 }
             }
+            // Fallback to OpenGL ES if needed
+            if (ctx == nint.Zero)
+            {
+                var initParams = new MpvOpenglInitParams
+                {
+                    get_proc_address = Marshal.GetFunctionPointerForDelegate(_procAddressCallback),
+                    get_proc_address_ctx = nint.Zero,
+                };
+                var enableAdvancedControl = 1;
+                byte[] managedParamApiType = Encoding.UTF8.GetBytes("opengl-es\0");
+                fixed (byte* paramApiType = managedParamApiType)
+                {
+                    MpvRenderParam[] renderParams = {
+                        new(){ type = mpv_render_param_type.MPV_RENDER_PARAM_API_TYPE, data = (void*)paramApiType },
+                        new(){ type = mpv_render_param_type.MPV_RENDER_PARAM_OPENGL_INIT_PARAMS , data = &initParams },
+                        new(){ type = mpv_render_param_type.MPV_RENDER_PARAM_ADVANCED_CONTROL , data = &enableAdvancedControl },
+                        new()
+                    };
+                    fixed (MpvRenderParam* ParamPtr = &renderParams[0])
+                    {
+                        int status = mpv_render_context_create(out ctx, _mpvContext, ParamPtr);
+                        if (status < 0)
+                        {
+                            Console.WriteLine($"mpv_render_context_create failed with api 'opengl-es': {status}");
+                            ctx = nint.Zero;
+                        }
+                    }
+                }
+            }
+            _mpvRenderContext = ctx;
         }
+
+        if (_mpvRenderContext == nint.Zero)
+        {
+            throw new Exception("Failed to create mpv OpenGL render context (opengl/opengl-es)");
+        }
+
+        _wakeupCallback = MpvEvent;
+        _renderUpdateCallback = MpvRenderUpdate;
+        mpv_set_wakeup_callback(_mpvContext, Marshal.GetFunctionPointerForDelegate(_wakeupCallback), nint.Zero);
+        mpv_render_context_set_update_callback(_mpvRenderContext, Marshal.GetFunctionPointerForDelegate(_renderUpdateCallback), nint.Zero);
+
         //Start the background worker
         _backgroundWorkerTask = Task.Run(() => BackgroundWorker(_backgroundWorkerCancellationTokenSource.Token));
     }
