@@ -38,16 +38,10 @@ public class MpvPlayer : IDisposable
         {
             throw new Exception("Failed to create mpv context");
         }
-        // Ensure OpenGL render API is used across platforms
-        mpv_set_option_string(mpv, "gpu-api", "opengl");
+        // Use libmpv render API for embedding
         mpv_set_option_string(mpv, "vo", "libmpv");
-
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-        {
-            //mpv_set_option_string(mpv, "vo", "gpu");
-            mpv_set_option_string(mpv, "gpu-context", "wayland");
-            mpv_set_option_string(mpv, "gpu-api", "opengl");
-        }
+        // Ensure OpenGL render API
+        mpv_set_option_string(mpv, "gpu-api", "opengl");
 
         if (mpv_initialize(mpv) < 0)
         {
@@ -73,7 +67,7 @@ public class MpvPlayer : IDisposable
             get_proc_address_ctx = nint.Zero,
         };
         var enableAdvancedControl = 1;
-        byte[] managedParamApiType = Encoding.UTF8.GetBytes("opengl" + "\0");
+        byte[] managedParamApiType = Encoding.UTF8.GetBytes("opengl\0");
         unsafe
         {
             fixed (byte* paramApiType = managedParamApiType)
@@ -99,6 +93,10 @@ public class MpvPlayer : IDisposable
                         _mpvContext,
                         ParamPtr
                     );
+                    if (status < 0)
+                    {
+                        Console.WriteLine($"mpv_render_context_create failed: {status}");
+                    }
                     _mpvRenderContext = mpv_gl;
                     _wakeupCallback = MpvEvent;
                     _renderUpdateCallback = MpvRenderUpdate;
@@ -112,19 +110,15 @@ public class MpvPlayer : IDisposable
     }
     private void MpvEvent(nint data)
     {
-        Dispatcher.UIThread.Post(() =>
-        {
-            _eventSignal.Set();
-            _eventQueue.Enqueue(CustomEventType.Wakeup);
-        });
+        // signal immediately from mpv thread
+        _eventQueue.Enqueue(CustomEventType.Wakeup);
+        _eventSignal.Set();
     }
     private void MpvRenderUpdate(nint data)
     {
-        Dispatcher.UIThread.Post(() =>
-        {
-            _eventSignal.Set();
-            _eventQueue.Enqueue(CustomEventType.Render);
-        });
+        // signal immediately from mpv thread
+        _eventQueue.Enqueue(CustomEventType.Render);
+        _eventSignal.Set();
     }
     //marshal a command to mpv
     public void MpvCommand(string[] command)
@@ -222,56 +216,53 @@ public class MpvPlayer : IDisposable
                 switch (_ev)
                 {
                     case CustomEventType.Wakeup:
-                        Dispatcher.UIThread.Post(() =>
+                        while (true)
                         {
-                            while (true)
+                            if (_mpvContext.isNullPtr()) continue;
+                            nint evPtr = mpv_wait_event(_mpvContext, 0.0);
+                            if (evPtr == nint.Zero) break;
+                            MpvEvent ev = Marshal.PtrToStructure<MpvEvent>(evPtr);
+                            if (ev.event_id == MpvEventId.MPV_EVENT_NONE) break;
+                            if (ev.event_id == MpvEventId.MPV_EVENT_PROPERTY_CHANGE)
                             {
-                                if (_mpvContext.isNullPtr()) continue;
-                                nint evPtr = mpv_wait_event(_mpvContext, 0.0);
-                                if (evPtr == nint.Zero) break;
-                                MpvEvent ev = Marshal.PtrToStructure<MpvEvent>(evPtr);
-                                if (ev.event_id == MpvEventId.MPV_EVENT_NONE) break;
-                                if (ev.event_id == MpvEventId.MPV_EVENT_PROPERTY_CHANGE)
+                                var prop = Marshal.PtrToStructure<MpvEventProperty>(ev.data);
+                                var name = Marshal.PtrToStringUTF8(prop.name);
+                                if (name is null) continue;
+                                if (prop.data == nint.Zero) continue;
+                                if (_mpvPropertyChangeEvents.TryGetValue(name, out (object ev, MpvFormat format) _data))
                                 {
-                                    var prop = Marshal.PtrToStructure<MpvEventProperty>(ev.data);
-                                    var name = Marshal.PtrToStringUTF8(prop.name);
-                                    if (name is null) continue;
-                                    if (prop.data == nint.Zero) continue;
-                                    if (_mpvPropertyChangeEvents.TryGetValue(name, out (object ev, MpvFormat format) _data))
+                                    switch (_data.format)
                                     {
-                                        switch (_data.format)
-                                        {
-                                            case MpvFormat.MPV_FORMAT_DOUBLE:
+                                        case MpvFormat.MPV_FORMAT_DOUBLE:
+                                            {
+                                                if (_data.ev is EventSource<double> eventSource)
                                                 {
-                                                    if (_data.ev is EventSource<double> eventSource)
-                                                    {
-                                                        var value = Marshal.PtrToStructure<double>(prop.data);
-                                                        eventSource.Raise(this, value);
-                                                    }
-                                                    break;
+                                                    var value = Marshal.PtrToStructure<double>(prop.data);
+                                                    eventSource.Raise(this, value);
                                                 }
-                                            case MpvFormat.MPV_FORMAT_FLAG:
+                                                break;
+                                            }
+                                        case MpvFormat.MPV_FORMAT_FLAG:
+                                            {
+                                                if (_data.ev is EventSource<int> eventSource)
                                                 {
-                                                    if (_data.ev is EventSource<int> eventSource)
-                                                    {
-                                                        var value = Marshal.PtrToStructure<int>(prop.data);
-                                                        eventSource.Raise(this, value);
-                                                    }
-                                                    break;
+                                                    var value = Marshal.PtrToStructure<int>(prop.data);
+                                                    eventSource.Raise(this, value);
                                                 }
-                                        }
+                                                break;
+                                            }
                                     }
                                 }
-                                else if (ev.event_id == MpvEventId.MPV_EVENT_LOG_MESSAGE)
-                                {
-                                    var log = Marshal.PtrToStructure<MpvEventLogMessage>(ev.data);
-                                    var prefix = Marshal.PtrToStringUTF8(log.prefix) ?? string.Empty;
-                                    var level = Marshal.PtrToStringUTF8(log.level) ?? string.Empty;
-                                    var text = Marshal.PtrToStringUTF8(log.text) ?? string.Empty;
-                                    Console.WriteLine($"[mpv {level}] {prefix}: {text}");
-                                }
                             }
-                        });
+                            else if (ev.event_id == MpvEventId.MPV_EVENT_LOG_MESSAGE)
+                            {
+                                var log = Marshal.PtrToStructure<MpvEventLogMessage>(ev.data);
+                                var prefix = Marshal.PtrToStringUTF8(log.prefix) ?? string.Empty;
+                                var level = Marshal.PtrToStringUTF8(log.level) ?? string.Empty;
+                                var text = Marshal.PtrToStringUTF8(log.text) ?? string.Empty;
+                                Console.WriteLine($"[mpv {level}] {prefix}: {text}");
+                            }
+                        }
                         break;
                     case CustomEventType.Render:
                         if (_mpvRenderContext.isNullPtr()) continue;
@@ -286,7 +277,7 @@ public class MpvPlayer : IDisposable
             if (redraw)
             {
                 if (ctx.IsCancellationRequested) return;
-                //trigger render here
+                //trigger render on UI thread
                 Dispatcher.UIThread.Post(() =>
                 {
                     _mediaControl?.TriggerRender();
@@ -393,6 +384,8 @@ public class MediaControl : OpenGlControlBase
         MpvPlayer._glInterface = gl;
         MpvPlayer._mediaControl = this;
         MpvPlayer.Initialise();
+        // Kick an initial render
+        RequestNextFrameRendering();
     }
 
     public static readonly StyledProperty<MpvPlayer> MpvPlayerProperty = AvaloniaProperty.Register<MediaControl, MpvPlayer>(nameof(MpvPlayer));
