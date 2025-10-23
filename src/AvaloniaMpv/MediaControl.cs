@@ -41,6 +41,14 @@ public class MpvPlayer : IDisposable
         // Ensure OpenGL render API is used across platforms
         mpv_set_option_string(mpv, "gpu-api", "opengl");
         mpv_set_option_string(mpv, "vo", "libmpv");
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            //mpv_set_option_string(mpv, "vo", "gpu");
+            mpv_set_option_string(mpv, "gpu-context", "wayland");
+            mpv_set_option_string(mpv, "gpu-api", "opengl");
+        }
+
         if (mpv_initialize(mpv) < 0)
         {
             Console.WriteLine("MPV failed to init");
