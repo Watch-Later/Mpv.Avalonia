@@ -33,6 +33,8 @@
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
+    <!-- X11 backend options used at compile time -->
+    <PackageReference Include="Avalonia.X11" Version="11.3.5" />
   </ItemGroup>
 
   <ItemGroup>
