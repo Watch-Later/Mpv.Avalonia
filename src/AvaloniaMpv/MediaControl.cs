@@ -1,6 +1,7 @@
 namespace AvaloniaMpv;
 
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
 using Avalonia;
@@ -308,7 +309,7 @@ public class MpvPlayer : IDisposable
 
     public void SeekTo(double ms)
     {
-        string[] command = { "seek", $"{ms}", "absolute" };
+        string[] command = { "seek", $"{ms.ToString(CultureInfo.InvariantCulture)}", "absolute" };
         MpvCommand(command);
     }
 
