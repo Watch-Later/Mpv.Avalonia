@@ -8,6 +8,7 @@ using Avalonia.OpenGL;
 using Avalonia.OpenGL.Controls;
 using Avalonia.Threading;
 using static LibMpv;
+using System.IO; // added for log file
 
 public class MpvPlayer : IDisposable
 {
@@ -24,6 +25,9 @@ public class MpvPlayer : IDisposable
     internal nint _mpvRenderContext = nint.Zero;
     internal ConcurrentQueue<CustomEventType> _eventQueue = new();
     private readonly Dictionary<string, (object, MpvFormat)> _mpvPropertyChangeEvents = new();
+    private readonly string _mpvLogPath; // path to mpv log file
+
+    public string MpvLogPath => _mpvLogPath;
 
     public void Dispose()
     {
@@ -32,6 +36,12 @@ public class MpvPlayer : IDisposable
     }
     public MpvPlayer()
     {
+        // Prepare mpv log file path under user-local data dir
+        var logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Mpv.Avalonia");
+        try { Directory.CreateDirectory(logDir); } catch { }
+        _mpvLogPath = Path.Combine(logDir, "mpv.log");
+        try { if (File.Exists(_mpvLogPath)) File.Delete(_mpvLogPath); } catch { }
+
         var mpv = mpv_create();
         _mpvContext = mpv;
         if (mpv.isNullPtr())
@@ -40,12 +50,15 @@ public class MpvPlayer : IDisposable
         }
         // Use libmpv render API for embedding
         mpv_set_option_string(mpv, "vo", "libmpv");
-        // Don't force gpu-api here; render backend is selected via API_TYPE in render params
+        // Write mpv logs to file with maximum verbosity before initialize
+        mpv_set_option_string(mpv, "log-file", _mpvLogPath);
+        mpv_set_option_string(mpv, "msg-level", "all=trace");
 
         if (mpv_initialize(mpv) < 0)
         {
             Console.WriteLine("MPV failed to init");
         }
+        Console.WriteLine($"mpv logs -> {_mpvLogPath}");
         mpv_request_log_messages(mpv, "trace");
     }
     internal void Initialise()
@@ -291,6 +304,7 @@ public class MpvPlayer : IDisposable
                                 var level = Marshal.PtrToStringUTF8(log.level) ?? string.Empty;
                                 var text = Marshal.PtrToStringUTF8(log.text) ?? string.Empty;
                                 Console.WriteLine($"[mpv {level}] {prefix}: {text}");
+                                try { File.AppendAllText(_mpvLogPath, $"[mpv {level}] {prefix}: {text}\n"); } catch { }
                             }
                         }
                         break;
