@@ -9,6 +9,7 @@ using Avalonia.OpenGL.Controls;
 using Avalonia.Threading;
 using static LibMpv;
 using System.IO; // added for log file
+using System.Globalization; // ensure mpv numbers use '.' decimal
 
 public class MpvPlayer : IDisposable
 {
@@ -343,7 +344,8 @@ public class MpvPlayer : IDisposable
 
     public void SeekTo(double ms)
     {
-        string[] command = { "seek", $"{ms}", "absolute" };
+        string pos = ms.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        string[] command = { "seek", pos, "absolute" };
         MpvCommand(command);
     }
 
