@@ -47,8 +47,10 @@ public class MpvPlayer : IDisposable
         {
             // Allow mpv to integrate with the compositor correctly by selecting the matching GPU context
             // Prefer Wayland when running under Wayland, otherwise X11. If unknown, let libmpv decide.
+            // Setup: sudo apt install mpv libmpv2 libmpv-dev libgl1 libegl1 mesa-utils
             try
             {
+
                 var sessionType = Environment.GetEnvironmentVariable("XDG_SESSION_TYPE")?.ToLowerInvariant();
                 var waylandDisplay = Environment.GetEnvironmentVariable("WAYLAND_DISPLAY");
                 var x11Display = Environment.GetEnvironmentVariable("DISPLAY");
