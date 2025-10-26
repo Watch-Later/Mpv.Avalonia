@@ -344,6 +344,10 @@ public class MpvPlayer : IDisposable
                 mpv_destroy(_mpvContext);
                 _mpvContext = nint.Zero;
             }
+
+            // After disposing mpv contexts, trigger a final render so the control clears its framebuffer
+            Dispatcher.UIThread.Post(() => _mediaControl?.TriggerRender());
+
             _disposed = true;
         }
     }
@@ -351,8 +355,29 @@ public class MpvPlayer : IDisposable
 
 public class MediaControl : OpenGlControlBase
 {
+    // GL interop for clearing framebuffer
+    private const uint GL_COLOR_BUFFER_BIT = 0x00004000;
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate void GlClearDelegate(uint mask);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate void GlClearColorDelegate(float r, float g, float b, float a);
+
+    private GlClearDelegate? _glClear;
+    private GlClearColorDelegate? _glClearColor;
+
     protected unsafe override void OnOpenGlRender(GlInterface gl, int fb)
     {
+        // Ensure delegates are resolved (in case OnOpenGlInit wasn't called for any reason)
+        if (_glClear is null || _glClearColor is null)
+        {
+            ResolveGlFunctions(gl);
+        }
+
+        // Always clear the framebuffer first to remove any stale video image
+        _glClearColor?.Invoke(0f, 0f, 0f, 0f);
+        _glClear?.Invoke(GL_COLOR_BUFFER_BIT);
+
         var size = this.Bounds;
         // Use pixel size for retina/HiDPI displays (e.g., macOS)
         var scale = this.VisualRoot?.RenderScaling ?? 1.0;
@@ -383,6 +408,20 @@ public class MediaControl : OpenGlControlBase
         }
     }
 
+    private void ResolveGlFunctions(GlInterface gl)
+    {
+        var clearPtr = gl.GetProcAddress("glClear");
+        var clearColorPtr = gl.GetProcAddress("glClearColor");
+        if (clearPtr != nint.Zero)
+        {
+            _glClear = Marshal.GetDelegateForFunctionPointer<GlClearDelegate>(clearPtr);
+        }
+        if (clearColorPtr != nint.Zero)
+        {
+            _glClearColor = Marshal.GetDelegateForFunctionPointer<GlClearColorDelegate>(clearColorPtr);
+        }
+    }
+
     internal void TriggerRender()
     {
         RequestNextFrameRendering();
@@ -391,6 +430,7 @@ public class MediaControl : OpenGlControlBase
     protected override void OnOpenGlInit(GlInterface gl)
     {
         base.OnOpenGlInit(gl);
+        ResolveGlFunctions(gl);
         MpvPlayer._glInterface = gl;
         MpvPlayer._mediaControl = this;
         MpvPlayer.Initialise();

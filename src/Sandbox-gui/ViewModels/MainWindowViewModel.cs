@@ -53,10 +53,13 @@ public partial class MainWindowViewModel : ViewModelBase
             _updatingPos = false;
         };
     }
+
     public void Dispose()
     {
+        // Clear the image from player by disposing and forcing a final render
         Player?.Dispose();
         Player = null;
         GC.Collect();
+        GC.WaitForPendingFinalizers();
     }
 }
