@@ -56,7 +56,6 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public void Dispose()
     {
-        // Clear the image from player by disposing and forcing a final render
         Player?.Dispose();
         Player = null;
         GC.Collect();

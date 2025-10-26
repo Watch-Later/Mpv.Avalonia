@@ -45,9 +45,27 @@ public class MpvPlayer : IDisposable
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
-            //mpv_set_option_string(mpv, "vo", "gpu");
-            mpv_set_option_string(mpv, "gpu-context", "wayland");
-            mpv_set_option_string(mpv, "gpu-api", "opengl");
+            // Allow mpv to integrate with the compositor correctly by selecting the matching GPU context
+            // Prefer Wayland when running under Wayland, otherwise X11. If unknown, let libmpv decide.
+            try
+            {
+                var sessionType = Environment.GetEnvironmentVariable("XDG_SESSION_TYPE")?.ToLowerInvariant();
+                var waylandDisplay = Environment.GetEnvironmentVariable("WAYLAND_DISPLAY");
+                var x11Display = Environment.GetEnvironmentVariable("DISPLAY");
+                if (sessionType == "wayland" || (!string.IsNullOrEmpty(waylandDisplay) && sessionType is null))
+                {
+                    mpv_set_option_string(mpv, "gpu-context", "wayland");
+                }
+                else if (sessionType == "x11" || (!string.IsNullOrEmpty(x11Display) && sessionType is null))
+                {
+                    mpv_set_option_string(mpv, "gpu-context", "x11");
+                }
+                // else: don't force gpu-context, mpv will autodetect based on the current GL context
+            }
+            catch
+            {
+                // Ignore detection errors; fallback to mpv defaults
+            }
         }
 
         if (mpv_initialize(mpv) < 0)
